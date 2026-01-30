@@ -1,4 +1,4 @@
-# StormIdle
+# Storm - An Incremental Idle Game
 
 An incremental idle game themed to rainfall. 
 
