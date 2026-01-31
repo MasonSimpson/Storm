@@ -11,15 +11,15 @@ public class IntroScreen implements Screen {
     // References
     private final com.stormidle.Storm game;
 
-    // Rendering
+    // Sprites and images used in rendering
     private SpriteBatch batch;
+    private Texture libgdxLogo;
     private Texture hexLogo;
-    private Texture gameLogo;
 
     // Animation state
     private float elapsed; // Total time since screen shown
-    private float alpha; // Transparency value for hex gaming logo (used to fading animation)
-    private float stormAlpha; // Transparency value for storm logo
+    private float alpha; // Transparency value for libgdx logo (used for fading animation)
+    private float hexAlpha; // Transparency value for hex gaming logo
 
     // Values for animation timers
     private final float FADE_IN_TIME  = 2.5f;
@@ -30,29 +30,30 @@ public class IntroScreen implements Screen {
     }
 
     @Override
-    // Called once this creen becomes active
+    // Called once this screen becomes active
     public void show() {
         batch = new SpriteBatch();
 
         // TODO: swap to AssetManager later
+        libgdxLogo = new Texture("libgdx_logo.png");
         hexLogo = new Texture("hex_gaming_logo.png");
-        gameLogo = new Texture("storm_logo.png");
 
         elapsed = 0f;
         alpha = 0f;
-        stormAlpha = 0f;
+        hexAlpha = 0f;
     }
 
     @Override
     public void render(float delta) {
 
         elapsed += delta;
+        float introEnd = (2f * FADE_IN_TIME) + (2f * FADE_OUT_TIME) + 1f;
 
         // Update alpha based on elapsed time
         alpha = computeAlpha(elapsed);
-        // Storm logo animation will start 0.5 seconds after logo 1 fades out
-        float stormLogoStart = FADE_IN_TIME + FADE_OUT_TIME + 0.5f;
-        stormAlpha = computeAlpha(elapsed - stormLogoStart);
+        // Hex logo animation will start 0.5 seconds after libgdx logo fades out
+        float hexLogoStart = FADE_IN_TIME + FADE_OUT_TIME + 0.5f;
+        hexAlpha = computeAlpha(elapsed - hexLogoStart);
 
         // Clear screen to black
         Gdx.gl.glClearColor(0f,0f,0f,1f);
@@ -65,15 +66,23 @@ public class IntroScreen implements Screen {
             alpha = 0f;
         }
         batch.setColor(1f,1f,1f, alpha);
-        float x = (Gdx.graphics.getWidth() - hexLogo.getWidth()) / 2f;
-        float y = (Gdx.graphics.getHeight() - hexLogo.getHeight()) / 2f;
-        batch.draw(hexLogo, x, y);
-        batch.setColor(1f, 1f, 1f, stormAlpha);
-        batch.draw(gameLogo, x, y);
+        batch.draw(libgdxLogo,
+            (Gdx.graphics.getWidth() - libgdxLogo.getWidth()) / 2f,
+            (Gdx.graphics.getHeight() - libgdxLogo.getHeight()) / 2f
+        );
+        batch.setColor(1f, 1f, 1f, hexAlpha);
+        batch.draw(hexLogo,
+            (Gdx.graphics.getWidth() - hexLogo.getWidth()) / 2f,
+            (Gdx.graphics.getHeight() - hexLogo.getHeight()) / 2f
+        );
         batch.setColor(1f,1f,1f,1f);
         batch.end();
 
         // TODO: Switch screens when animation is done
+        if (elapsed > introEnd) {
+            game.setScreen(new MainMenuScreen(game));
+        }
+
 
     }
 
@@ -101,6 +110,7 @@ public class IntroScreen implements Screen {
         }
     }
 
+    // Checker for first logo animation
     private boolean isFinished(float t) {
         float end = FADE_IN_TIME + FADE_OUT_TIME;
         return t >= end;
