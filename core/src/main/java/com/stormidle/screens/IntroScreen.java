@@ -13,11 +13,13 @@ public class IntroScreen implements Screen {
 
     // Rendering
     private SpriteBatch batch;
-    private Texture logo;
+    private Texture hexLogo;
+    private Texture gameLogo;
 
     // Animation state
     private float elapsed; // Total time since screen shown
-    private float alpha; // Transparency value for logo (used to fading animation)
+    private float alpha; // Transparency value for hex gaming logo (used to fading animation)
+    private float stormAlpha; // Transparency value for storm logo
 
     // Values for animation timers
     private final float FADE_IN_TIME  = 2.5f;
@@ -33,10 +35,12 @@ public class IntroScreen implements Screen {
         batch = new SpriteBatch();
 
         // TODO: swap to AssetManager later
-        logo = new Texture("hex_gaming_logo.png");
+        hexLogo = new Texture("hex_gaming_logo.png");
+        gameLogo = new Texture("storm_logo.png");
 
         elapsed = 0f;
         alpha = 0f;
+        stormAlpha = 0f;
     }
 
     @Override
@@ -46,6 +50,9 @@ public class IntroScreen implements Screen {
 
         // Update alpha based on elapsed time
         alpha = computeAlpha(elapsed);
+        // Storm logo animation will start 0.5 seconds after logo 1 fades out
+        float stormLogoStart = FADE_IN_TIME + FADE_OUT_TIME + 0.5f;
+        stormAlpha = computeAlpha(elapsed - stormLogoStart);
 
         // Clear screen to black
         Gdx.gl.glClearColor(0f,0f,0f,1f);
@@ -54,10 +61,15 @@ public class IntroScreen implements Screen {
         // Draw logo with alpha (constantly changes to mimic a fade in /fade out)
         // And center the logo on the screen
         batch.begin();
+        if (isFinished(elapsed)) {
+            alpha = 0f;
+        }
         batch.setColor(1f,1f,1f, alpha);
-        float x = (Gdx.graphics.getWidth() - logo.getWidth()) / 2f;
-        float y = (Gdx.graphics.getHeight() - logo.getHeight()) / 2f;
-        batch.draw(logo, x, y);
+        float x = (Gdx.graphics.getWidth() - hexLogo.getWidth()) / 2f;
+        float y = (Gdx.graphics.getHeight() - hexLogo.getHeight()) / 2f;
+        batch.draw(hexLogo, x, y);
+        batch.setColor(1f, 1f, 1f, stormAlpha);
+        batch.draw(gameLogo, x, y);
         batch.setColor(1f,1f,1f,1f);
         batch.end();
 
@@ -103,6 +115,6 @@ public class IntroScreen implements Screen {
     public void dispose() {
         // Cleanup
         batch.dispose();
-        logo.dispose();
+        hexLogo.dispose();
     }
 }
