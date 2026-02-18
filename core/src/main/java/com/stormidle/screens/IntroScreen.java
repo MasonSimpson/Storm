@@ -80,7 +80,7 @@ public class IntroScreen implements Screen {
 
         // TODO: Switch screens when animation is done
         if (elapsed > introEnd) {
-            game.setScreen(new MainMenuScreen(game));
+            game.setScreen(new GameScreen(game));
         }
 
 
