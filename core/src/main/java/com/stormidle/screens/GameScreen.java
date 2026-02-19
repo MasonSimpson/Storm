@@ -33,12 +33,12 @@ public class GameScreen implements Screen {
     private static final float BOWL_HEIGHT =      200f;
     private static final float BAR_WIDTH =        80f; // Progress bar for bowl
     private static final float BAR_HEIGHT =       8f;
-    private static final float BAR_Y_OFFSET =     6f; // Gap between bottom of bowl and top of bar
+    private static final float BAR_Y_OFFSET =     3f; // Gap between bottom of bowl and top of bar
     private static final float ICON_SIZE =        32f;
     private static final float ICON_PADDING =     8f; // Gap between icon and label
     private static final float BTN_WIDTH =        400f;
     private static final float BTN_HEIGHT =       200f;
-    private static final float BTN_PADDING =      6f;   // Gap between buttons
+    private static final float BTN_PADDING =      3f;   // Gap between buttons
     private static final float BTN_RIGHT_MARGIN = 20f;   // Gap from right edge of screen
     private static final float POPUP_WIDTH =      400f;
     private static final float POPUP_HEIGHT =     600f;
