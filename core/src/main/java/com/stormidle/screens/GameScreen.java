@@ -31,8 +31,10 @@ public class GameScreen implements Screen {
     private static final float BOWL_WIDTH =   400f;
     private static final float BOWL_HEIGHT =  200f;
     private static final float BAR_WIDTH =    80f; // Progress bar for bowl
-    private static final float BAR_HEIGHT =   12f;
+    private static final float BAR_HEIGHT =   8f;
     private static final float BAR_Y_OFFSET = 6f; // Gap between bottom of bowl and top of bar
+    private static final float ICON_SIZE =    32f;
+    private static final float ICON_PADDING = 8f; // Gap between icon and label
 
     // Core of game
     private final com.stormidle.Storm game;
@@ -44,10 +46,11 @@ public class GameScreen implements Screen {
     private Texture cloudTexture;
     private Texture rainTexture;
     private Texture bowlTexture;
+    private Texture currencyTexture;
 
     // Actors, or sprites, for stage
     private Image cloud;
-    private Image bowl;
+    private Image currency;
     private ProgressBar fillBar;
     private Label currencyLabel;
 
@@ -109,14 +112,34 @@ public class GameScreen implements Screen {
         font.getData().setScale(2f);
         Label.LabelStyle labelStyle = new Label.LabelStyle(font, Color.WHITE);
         currencyLabel = new Label(getCurrencyText(), labelStyle);
-        currencyLabel.setWidth(stageWidth);
-        currencyLabel.setAlignment(Align.center);
-        currencyLabel.setPosition(0, stageHeight - currencyLabel.getPrefHeight() - 20);
+        currencyLabel.setPosition(0, stageHeight - currencyLabel.getPrefHeight() - 33);
 
         stage.addActor(currencyLabel);
 
+        currencyTexture = new Texture("currency.png");
+        currency = new Image(currencyTexture);
+        currency.setSize(ICON_SIZE, ICON_SIZE);
+        stage.addActor(currency);
+
+        // Set initial positions of icon + label together
+        updateCurrencyDisplay();
+
         // Rain texture
         rainTexture = new Texture("rain.png");
+    }
+
+    // Helper function for positioning the currency icon + label
+    // Useful later on when currency value becomes bigger
+    private void updateCurrencyDisplay() {
+        currencyLabel.setText(getCurrencyText());
+
+        float labelW = currencyLabel.getPrefWidth();
+        float totalW = ICON_SIZE + ICON_PADDING + labelW;
+        float startX = (stageWidth / 2f) - (totalW / 2f);
+        float yPos = stageHeight - currencyLabel.getPrefHeight() - 33;
+
+        currency.setPosition(startX, yPos + (currencyLabel.getPrefHeight() / 2f) - (ICON_SIZE / 2f));
+        currencyLabel.setPosition(startX + ICON_SIZE + ICON_PADDING, yPos);
     }
 
     // Helper function for creating the progress bar, uses Pixmaps
@@ -148,7 +171,7 @@ public class GameScreen implements Screen {
     }
 
     private String getCurrencyText() {
-        return gameData.currency + " currency";
+        return gameData.currency + "";
     }
 
 
@@ -193,7 +216,7 @@ public class GameScreen implements Screen {
             dropsCollected = 0;
             fillBar.setValue(0f);
             gameData.currency++;
-            currencyLabel.setText(getCurrencyText());
+            updateCurrencyDisplay();
         }
     }
 
