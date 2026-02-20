@@ -12,9 +12,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.Image;
-import com.badlogic.gdx.scenes.scene2d.ui.Label;
-import com.badlogic.gdx.scenes.scene2d.ui.ProgressBar;
+import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
@@ -22,12 +20,12 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
 import com.stormidle.objects.GameData;
+import com.stormidle.upgrades.UpgradeTier;
+import com.stormidle.upgrades.RainUpgrades;
 
 public class GameScreen implements Screen {
 
     // Tweakable values for game UI
-    private static final int DROPS_TO_FILL =      50; // How many drops needed to convert the rainfall into currency
-    private static final float FALL_SPEED =       300f;
     private static final float BOWL_WIDTH =       400f;
     private static final float BOWL_HEIGHT =      200f;
     private static final float BAR_WIDTH =        80f; // Progress bar for bowl
@@ -42,19 +40,27 @@ public class GameScreen implements Screen {
     private static final float POPUP_WIDTH =      400f;
     private static final float POPUP_HEIGHT =     600f;
 
+    // Upgrade row layout inside upgrade popup
+    private static final float ROW_HEIGHT =       80f;
+    private static final float ROW_PADDING =       8f;
+    private static final float ROW_MARGIN =       10f;
+    private static final float BTN_BUY_W =        70f;
+    private static final float BTN_BUY_H =        30f;
+    private static final float HEADER_H =         40f; // Height reserved for title + close button
+    private static final float POPUP_PADDING =     8f; // Padding around scroll pane
+
     // Core of game
     private final com.stormidle.Storm game;
     private Stage stage = new Stage(new ScreenViewport());
     private SpriteBatch batch;
     private GameData gameData = new GameData();
+    private RainUpgrades rainUpgrades = new RainUpgrades();
 
     // Sprite textures
     private Texture cloudTexture;
     private Texture rainTexture;
     private Texture bowlTexture;
     private Texture currencyTexture;
-
-    // Button textures
     private Texture rainButtonTexture;
     private Texture autoButtonTexture;
     private Texture econButtonTexture;
@@ -62,6 +68,13 @@ public class GameScreen implements Screen {
     private Texture prestigeButtonTexture;
     private Texture notUnlockedTexture;
     private Texture popupBgTexture;
+
+    // Textures for upgrade row buttons (reused by all trees)
+    private Texture rowTexture;
+    private Texture rowLockedTexture;
+    private Texture rowPurchasedTexture;
+    private Texture buyButtonTexture;
+    private Texture buyButtonDisabledTexture;
 
     // Tracks which upgrade popup is open (null = none are open)
     private Group activePopup = null;
@@ -73,7 +86,7 @@ public class GameScreen implements Screen {
     private ProgressBar fillBar;
     private Label currencyLabel;
 
-    // Rain and bowl states
+    // Rain / bowl state
     private Array<Rain> rain;
     private int dropsCollected = 0; // Resets to 0 each time the bowl converts
     private float bowlX;
@@ -98,19 +111,17 @@ public class GameScreen implements Screen {
         stageWidth  = stage.getWidth();
         stageHeight = stage.getHeight();
 
-        // Initialize cloud
+        // Initialize cloud and add to stage
         cloudTexture = new Texture("cloud_1.png");
         cloud = new Image(cloudTexture);
         cloud.setSize(cloud.getPrefWidth(), cloud.getPrefHeight());
         cloud.setPosition(stageWidth * 0.10f, stageHeight * 0.65f);
-
         cloud.addListener(new ClickListener() {
            @Override
            public void clicked(InputEvent event, float x, float y) {
-               rain.add(new Rain(cloud.getX(), cloud.getY(), FALL_SPEED));
+               rain.add(new Rain(cloud.getX(), cloud.getY(), gameData.fallSpeed));
            }
         });
-
         stage.addActor(cloud);
 
         // Bowl to catch the rainfall
@@ -119,7 +130,7 @@ public class GameScreen implements Screen {
         bowlY = 20f;
 
         // Progress bar for bowl, sits underneath the bowl actor
-        fillBar = new ProgressBar(0f, DROPS_TO_FILL, 1f, false, createFillBarStyle());
+        fillBar = new ProgressBar(0f, gameData.dropsToFill, 1f, false, createFillBarStyle());
         fillBar.setValue(0f);
         fillBar.setSize(BAR_WIDTH, BAR_HEIGHT);
         fillBar.setPosition(
@@ -138,6 +149,7 @@ public class GameScreen implements Screen {
 
         stage.addActor(currencyLabel);
 
+        // Currency icon
         currencyTexture = new Texture("currency.png");
         currency = new Image(currencyTexture);
         currency.setSize(ICON_SIZE, ICON_SIZE);
@@ -174,6 +186,23 @@ public class GameScreen implements Screen {
         addUpgradeButton(abilitiesButtonTexture, btnX, startY - 3 * (BTN_HEIGHT + BTN_PADDING), "ult");
         // Prestige pinned to bottom right
         addUpgradeButton(prestigeButtonTexture, btnX, 20f, "prestige");
+
+        // Upgrade row textures
+        rowTexture =               makeColorTexture(0.2f, 0.25f, 0.35f, 1f);
+        rowLockedTexture =         makeColorTexture(0.15f, 0.15f, 0.20f, 1f);
+        rowPurchasedTexture =      makeColorTexture(0.15f, 0.35f, 0.20f, 1f);
+        buyButtonTexture =         makeColorTexture(0.25f, 0.55f, 0.85f, 1f);
+        buyButtonDisabledTexture = makeColorTexture(0.35f, 0.35f, 0.40f, 1f);
+    }
+
+    // Creates a 1x1 Texture filled with the given RGBA color
+    private Texture makeColorTexture(float r, float g, float b, float a) {
+        Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pm.setColor(r, g, b, a);
+        pm.fill();
+        Texture tex = new Texture(pm);
+        pm.dispose();
+        return tex;
     }
 
     // Helper function to add and position upgrade buttons on the screen properly
@@ -194,6 +223,7 @@ public class GameScreen implements Screen {
     private void togglePopup(String type) {
         if (activePopup != null) {
             activePopup.remove();
+            stage.setScrollFocus(null);
             String wasOpen = activePopupType;
             activePopup     = null;
             activePopupType = null;
@@ -202,6 +232,17 @@ public class GameScreen implements Screen {
         }
 
         activePopup = buildPopup(type);
+        activePopupType = type;
+        stage.addActor(activePopup);
+    }
+
+    // Rebuilds and re-opens the current popup in place. Call this after any upgrade is purchased
+    // so button states can refresh
+    private void refreshActivePopup() {
+        if (activePopup == null) return;
+        String type = activePopupType;
+        activePopup.remove();
+        activePopup     = buildPopup(type);
         activePopupType = type;
         stage.addActor(activePopup);
     }
@@ -231,12 +272,17 @@ public class GameScreen implements Screen {
         title.setPosition(10, POPUP_HEIGHT - 30);
         popup.addActor(title);
 
-        // TODO: Replace with real upgrade text
-        BitmapFont bodyFont = new BitmapFont();
-        Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
-        Label placeholder = new Label("No upgrades yet.", bodyStyle);
-        placeholder.setPosition(10, POPUP_HEIGHT - 60);
-        popup.addActor(placeholder);
+        // Content — rain popup gets real upgrade rows; others keep placeholder
+        // TODO: Replace placeholder with other upgrade content
+        if ("rain".equals(type)) {
+            buildRainPopupContent(popup);
+        } else {
+            BitmapFont bodyFont = new BitmapFont();
+            Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
+            Label placeholder = new Label("No upgrades yet.", bodyStyle);
+            placeholder.setPosition(10, POPUP_HEIGHT - 60);
+            popup.addActor(placeholder);
+        }
 
         // Close button
         BitmapFont closeFont = new BitmapFont();
@@ -247,6 +293,7 @@ public class GameScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 popup.remove();
+                stage.setScrollFocus(null);
                 activePopup     = null;
                 activePopupType = null;
             }
@@ -256,16 +303,180 @@ public class GameScreen implements Screen {
         return popup;
     }
 
+    // Populates the rain upgrade group with all upgrade trees rendered as stacked rows.
+    // Rows are drawn top-to-bottom with a small section header separating the trees
+    private void buildRainPopupContent(Group popup) {
+        // Height and width and scroll pane
+        float scrollW = POPUP_WIDTH - POPUP_PADDING * 2f;
+        float scrollH = POPUP_HEIGHT - HEADER_H - POPUP_PADDING * 2f;
+
+        BitmapFont font = new BitmapFont();
+        font.getData().setScale(0.9f);
+
+        BitmapFont headerFont = new BitmapFont();
+        headerFont.getData().setScale(1.1f);
+
+        // Inner table — rows are added top-to-bottom using Table's cell system.
+        // We use a fixed row width matching the scroll pane so backgrounds fill correctly.
+        Table content = new Table();
+        content.top().left();
+        content.defaults().left();
+
+        // ── Speed tree ───────────────────────────────────────────────────────
+        addSectionHeader(content, "Rain Fall Speed", headerFont, scrollW);
+        for (int i = 0; i < rainUpgrades.speedTree.size; i++) {
+            addUpgradeRow(content, font, rainUpgrades.speedTree, i, scrollW);
+        }
+
+        // Extra gap between trees
+        content.add().height(ROW_PADDING * 2f).row();
+
+        // ── Bowl tree ────────────────────────────────────────────────────────
+        addSectionHeader(content, "Rain Value", headerFont, scrollW);
+        for (int i = 0; i < rainUpgrades.bowlTree.size; i++) {
+            addUpgradeRow(content, font, rainUpgrades.bowlTree, i, scrollW);
+        }
+
+        // ScrollPane with no scroll bars visible (touch/drag to scroll)
+        ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
+        ScrollPane scrollPane = new ScrollPane(content, spStyle);
+        scrollPane.setScrollingDisabled(true, false);  // horizontal off, vertical on
+        scrollPane.setOverscroll(false, false);
+        scrollPane.setFadeScrollBars(true);
+        scrollPane.setSize(scrollW, scrollH);
+        scrollPane.setPosition(POPUP_PADDING, POPUP_PADDING);
+
+        popup.addActor(scrollPane);
+
+        // Forces scroll focus without requiring a click
+        stage.setScrollFocus(scrollPane);
+    }
+
+    // Draws a section header label to the content table
+    private void addSectionHeader(Table content, String text, BitmapFont font, float rowWidth) {
+        Label.LabelStyle style = new Label.LabelStyle(font, new Color(0.6f, 0.85f, 1f, 1f));
+        Label header = new Label(text, style);
+        content.add(header).width(rowWidth).padTop(ROW_PADDING).padBottom(4f).row();
+    }
+
+    // Draws one upgrade row for the given tree/index. Returns the new Y below it.
+    // Row states:
+    // * PURCHASED - green tint, no buy button
+    // * UNLOCKED - normal tint, buy button (greyed if not affordable)
+    // * LOCKED - dark tint, padlock label, no buy button
+    private void addUpgradeRow(Table content, BitmapFont font,
+                               final Array<UpgradeTier> tree, final int index, float rowWidth) {
+        UpgradeTier upgrade  = tree.get(index);
+        UpgradeTier previous = rainUpgrades.previous(tree, index);
+        boolean purchased = upgrade.purchased;
+        boolean unlocked  = upgrade.isUnlocked(previous);
+        boolean canAfford = gameData.currency >= upgrade.cost;
+
+        // Outer group sized to ROW_HEIGHT so we can layer background + widgets
+        Group row = new Group();
+        row.setSize(rowWidth, ROW_HEIGHT);
+
+        // Background
+        Texture bgTex = purchased ? rowPurchasedTexture
+            : unlocked  ? rowTexture
+            : rowLockedTexture;
+        Image rowBg = new Image(bgTex);
+        rowBg.setSize(rowWidth, ROW_HEIGHT);
+        row.addActor(rowBg);
+
+        // Upgrade name
+        Color nameColor = purchased ? Color.GREEN
+            : unlocked  ? Color.WHITE
+            : Color.DARK_GRAY;
+        Label.LabelStyle nameStyle = new Label.LabelStyle(font, nameColor);
+        Label nameLabel = new Label(upgrade.name, nameStyle);
+        nameLabel.setPosition(6f, ROW_HEIGHT - nameLabel.getPrefHeight() - 4f);
+        row.addActor(nameLabel);
+
+        // Description
+        BitmapFont descFont = new BitmapFont();
+        Label.LabelStyle descStyle = new Label.LabelStyle(descFont,
+            unlocked ? Color.LIGHT_GRAY : Color.DARK_GRAY);
+        Label descLabel = new Label(upgrade.description, descStyle);
+        descLabel.setPosition(6f, 6f);
+        row.addActor(descLabel);
+
+        // Right-side widget varies by state
+        if (purchased) {
+            BitmapFont badgeFont = new BitmapFont();
+            Label.LabelStyle badgeStyle = new Label.LabelStyle(badgeFont, Color.GREEN);
+            Label badge = new Label("Purchased", badgeStyle);
+            badge.setPosition(
+                rowWidth - badge.getPrefWidth() - 6f,
+                (ROW_HEIGHT / 2f) - (badge.getPrefHeight() / 2f)
+            );
+            row.addActor(badge);
+
+        } else if (unlocked) {
+            float btnX = rowWidth - BTN_BUY_W - 6f;
+
+            // Cost label
+            BitmapFont costFont = new BitmapFont();
+            Label.LabelStyle costStyle = new Label.LabelStyle(costFont,
+                canAfford ? new Color(0.9f, 0.85f, 0.3f, 1f) : Color.RED);
+            Label costLabel = new Label(upgrade.cost + " drops", costStyle);
+            costLabel.setPosition(btnX, BTN_BUY_H + 10f);
+            row.addActor(costLabel);
+
+            // Buy button background
+            Image buyBtn = new Image(canAfford ? buyButtonTexture : buyButtonDisabledTexture);
+            buyBtn.setSize(BTN_BUY_W, BTN_BUY_H);
+            buyBtn.setPosition(btnX, 6f);
+            row.addActor(buyBtn);
+
+            // "Buy" label
+            BitmapFont btnFont = new BitmapFont();
+            Label.LabelStyle btnStyle = new Label.LabelStyle(btnFont, Color.WHITE);
+            Label btnLabel = new Label("Buy", btnStyle);
+            btnLabel.setPosition(
+                btnX + (BTN_BUY_W / 2f) - (btnLabel.getPrefWidth()  / 2f),
+                6f   + (BTN_BUY_H / 2f) - (btnLabel.getPrefHeight() / 2f)
+            );
+            row.addActor(btnLabel);
+
+            buyBtn.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    // Re-check affordability at click time, not at popup-build time
+                    if (gameData.currency < upgrade.cost) return;
+                    boolean bought = rainUpgrades.tryPurchase(tree, index, gameData);
+                    if (bought) {
+                        updateFillBar();
+                        updateCurrencyDisplay();
+                        refreshActivePopup();
+                    }
+                }
+            });
+
+        } else {
+            BitmapFont lockFont = new BitmapFont();
+            Label.LabelStyle lockStyle = new Label.LabelStyle(lockFont, Color.DARK_GRAY);
+            Label lockLabel = new Label("Locked", lockStyle);
+            lockLabel.setPosition(
+                rowWidth - lockLabel.getPrefWidth() - 6f,
+                (ROW_HEIGHT / 2f) - (lockLabel.getPrefHeight() / 2f)
+            );
+            row.addActor(lockLabel);
+        }
+
+        content.add(row).width(rowWidth).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
+    }
+
     // Quick helper function for title that displays on upgrade popup windows
     private String getPopupTitle(String type) {
-        switch (type) {
-            case "rain":     return "Rain Upgrades";
-            case "auto":     return "Auto Upgrades";
-            case "econ":     return "Econ Upgrades";
-            case "ult":      return "Ult Upgrades";
-            case "prestige": return "Cloud Prestige";
-            default:         return "Upgrades";
-        }
+        return switch (type) {
+            case "rain" -> "Rain Upgrades";
+            case "auto" -> "Auto Upgrades";
+            case "econ" -> "Econ Upgrades";
+            case "ult" -> "Ult Upgrades";
+            case "prestige" -> "Cloud Prestige";
+            default -> "Upgrades";
+        };
     }
 
     // Helper function for positioning the currency icon + label
@@ -280,6 +491,14 @@ public class GameScreen implements Screen {
 
         currency.setPosition(startX, yPos + (currencyLabel.getPrefHeight() / 2f) - (ICON_SIZE / 2f));
         currencyLabel.setPosition(startX + ICON_SIZE + ICON_PADDING, yPos);
+    }
+
+    // Syncs the progress bar's max value to match the drops needed to convert to currency
+    private void updateFillBar() {
+        // Cap collected drops so bar doesn't need the new lower max value
+        if (dropsCollected > gameData.dropsToFill) dropsCollected = gameData.dropsToFill;
+        fillBar.setRange(0f, gameData.dropsToFill);
+        fillBar.setValue(dropsCollected);
     }
 
     // Helper function for creating the progress bar, uses Pixmaps
@@ -352,11 +571,13 @@ public class GameScreen implements Screen {
         dropsCollected++;
         fillBar.setValue(dropsCollected);
 
-        if (dropsCollected >= DROPS_TO_FILL) {
+        if (dropsCollected >= gameData.dropsToFill) {
             dropsCollected = 0;
             fillBar.setValue(0f);
             gameData.currency++;
             updateCurrencyDisplay();
+            // Refresh popup affordability after earning currency
+            if("rain".equals(activePopupType)) refreshActivePopup();
         }
     }
 
@@ -382,5 +603,10 @@ public class GameScreen implements Screen {
         prestigeButtonTexture.dispose();
         notUnlockedTexture.dispose();
         popupBgTexture.dispose();
+        rowTexture.dispose();
+        rowLockedTexture.dispose();
+        rowPurchasedTexture.dispose();
+        buyButtonTexture.dispose();
+        buyButtonDisabledTexture.dispose();
     }
 }
