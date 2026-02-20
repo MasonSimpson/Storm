@@ -22,6 +22,7 @@ import com.stormidle.objects.Rain;
 import com.stormidle.objects.GameData;
 import com.stormidle.upgrades.UpgradeTier;
 import com.stormidle.upgrades.RainUpgrades;
+import com.stormidle.upgrades.AutoUpgrades;
 
 public class GameScreen implements Screen {
 
@@ -55,6 +56,7 @@ public class GameScreen implements Screen {
     private SpriteBatch batch;
     private GameData gameData = new GameData();
     private RainUpgrades rainUpgrades = new RainUpgrades();
+    private AutoUpgrades autoUpgrades = new AutoUpgrades();
 
     // Sprite textures
     private Texture cloudTexture;
@@ -91,6 +93,9 @@ public class GameScreen implements Screen {
     private int dropsCollected = 0; // Resets to 0 each time the bowl converts
     private float bowlX;
     private float bowlY;
+
+    // Accumulates drops from auto-rain
+    private float autoRainAccumulator = 0f;
 
     // Variables used to position sprites
     private float stageWidth;
@@ -181,8 +186,8 @@ public class GameScreen implements Screen {
         float startY = stageHeight - BTN_HEIGHT - 60f;
 
         addUpgradeButton(rainButtonTexture, btnX, startY - 0 * (BTN_HEIGHT + BTN_PADDING), "rain");
-        addUpgradeButton(econButtonTexture, btnX, startY - 1 * (BTN_HEIGHT + BTN_PADDING), "econ");
-        addUpgradeButton(autoButtonTexture, btnX, startY - 2 * (BTN_HEIGHT + BTN_PADDING), "auto");
+        addUpgradeButton(autoButtonTexture, btnX, startY - 1 * (BTN_HEIGHT + BTN_PADDING), "auto");
+        addUpgradeButton(econButtonTexture, btnX, startY - 2 * (BTN_HEIGHT + BTN_PADDING), "econ");
         addUpgradeButton(abilitiesButtonTexture, btnX, startY - 3 * (BTN_HEIGHT + BTN_PADDING), "ult");
         // Prestige pinned to bottom right
         addUpgradeButton(prestigeButtonTexture, btnX, 20f, "prestige");
@@ -275,7 +280,15 @@ public class GameScreen implements Screen {
         // Content — rain popup gets real upgrade rows; others keep placeholder
         // TODO: Replace placeholder with other upgrade content
         if ("rain".equals(type)) {
-            buildRainPopupContent(popup);
+            buildPopupContent(popup,
+                new String[][]{{"Rain Fall Speed"}, {"Rain Value"}},
+                new Array[]{rainUpgrades.speedTree, rainUpgrades.bowlTree}
+            );
+        } else if ("auto".equals(type)) {
+            buildPopupContent(popup,
+                new String[][]{{"Rain Generation"}},
+                new Array[]{autoUpgrades.autoTree}
+            );
         } else {
             BitmapFont bodyFont = new BitmapFont();
             Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
@@ -303,10 +316,10 @@ public class GameScreen implements Screen {
         return popup;
     }
 
-    // Populates the rain upgrade group with all upgrade trees rendered as stacked rows.
+    // Populates the given upgrade group with all upgrade trees rendered as stacked rows.
     // Rows are drawn top-to-bottom with a small section header separating the trees
-    private void buildRainPopupContent(Group popup) {
-        // Height and width and scroll pane
+    private void buildPopupContent(Group popup, String[][] sections, Array<UpgradeTier>[] trees) {
+        // Height and width of scroll pane
         float scrollW = POPUP_WIDTH - POPUP_PADDING * 2f;
         float scrollH = POPUP_HEIGHT - HEADER_H - POPUP_PADDING * 2f;
 
@@ -316,31 +329,24 @@ public class GameScreen implements Screen {
         BitmapFont headerFont = new BitmapFont();
         headerFont.getData().setScale(1.1f);
 
-        // Inner table — rows are added top-to-bottom using Table's cell system.
-        // We use a fixed row width matching the scroll pane so backgrounds fill correctly.
+        // Inner table that holds all rows and wrapped in ScrollPane
         Table content = new Table();
         content.top().left();
         content.defaults().left();
 
-        // ── Speed tree ───────────────────────────────────────────────────────
-        addSectionHeader(content, "Rain Fall Speed", headerFont, scrollW);
-        for (int i = 0; i < rainUpgrades.speedTree.size; i++) {
-            addUpgradeRow(content, font, rainUpgrades.speedTree, i, scrollW);
+        // Iterate over each tree, drawing a section header followed by its upgrade rows
+        for (int t = 0; t < trees.length; t++) {
+            if (t > 0) content.add().height(ROW_PADDING * 2f).row(); // gap between trees
+            addSectionHeader(content, sections[t][0], headerFont, scrollW);
+            for (int i = 0; i < trees[t].size; i++) {
+                addUpgradeRow(content, font, trees[t], i, scrollW);
+            }
         }
 
-        // Extra gap between trees
-        content.add().height(ROW_PADDING * 2f).row();
-
-        // ── Bowl tree ────────────────────────────────────────────────────────
-        addSectionHeader(content, "Rain Value", headerFont, scrollW);
-        for (int i = 0; i < rainUpgrades.bowlTree.size; i++) {
-            addUpgradeRow(content, font, rainUpgrades.bowlTree, i, scrollW);
-        }
-
-        // ScrollPane with no scroll bars visible (touch/drag to scroll)
+        // Wrap content in a ScrollPane
         ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
         ScrollPane scrollPane = new ScrollPane(content, spStyle);
-        scrollPane.setScrollingDisabled(true, false);  // horizontal off, vertical on
+        scrollPane.setScrollingDisabled(true, false); // Horizontal scrolling disabled, vertical scrolling on
         scrollPane.setOverscroll(false, false);
         scrollPane.setFadeScrollBars(true);
         scrollPane.setSize(scrollW, scrollH);
@@ -348,7 +354,7 @@ public class GameScreen implements Screen {
 
         popup.addActor(scrollPane);
 
-        // Forces scroll focus without requiring a click
+        // Give scroll pane immediate focus so player can scroll without having to click
         stage.setScrollFocus(scrollPane);
     }
 
@@ -367,7 +373,7 @@ public class GameScreen implements Screen {
     private void addUpgradeRow(Table content, BitmapFont font,
                                final Array<UpgradeTier> tree, final int index, float rowWidth) {
         UpgradeTier upgrade  = tree.get(index);
-        UpgradeTier previous = rainUpgrades.previous(tree, index);
+        UpgradeTier previous = UpgradeTier.previous(tree, index);
         boolean purchased = upgrade.purchased;
         boolean unlocked  = upgrade.isUnlocked(previous);
         boolean canAfford = gameData.currency >= upgrade.cost;
@@ -444,7 +450,7 @@ public class GameScreen implements Screen {
                 public void clicked(InputEvent event, float x, float y) {
                     // Re-check affordability at click time, not at popup-build time
                     if (gameData.currency < upgrade.cost) return;
-                    boolean bought = rainUpgrades.tryPurchase(tree, index, gameData);
+                    boolean bought = UpgradeTier.tryPurchase(tree, index, gameData);
                     if (bought) {
                         updateFillBar();
                         updateCurrencyDisplay();
@@ -540,6 +546,15 @@ public class GameScreen implements Screen {
 
         stage.act(delta);
         stage.draw();
+
+        // Auto-rain based on rps (rainfall per second) in GameData.java
+        if (gameData.rps > 0) {
+            autoRainAccumulator += gameData.rps * delta;
+            while (autoRainAccumulator >= 1f) {
+                autoRainAccumulator -= 1f;
+                rain.add(new Rain(cloud.getX(), cloud.getY(), gameData.fallSpeed));
+            }
+        }
 
         updateRainfall(delta);
 
