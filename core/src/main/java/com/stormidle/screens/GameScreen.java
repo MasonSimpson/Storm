@@ -18,7 +18,6 @@ import com.badlogic.gdx.scenes.scene2d.ui.ProgressBar;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
-import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
@@ -27,7 +26,7 @@ import com.stormidle.objects.GameData;
 public class GameScreen implements Screen {
 
     // Tweakable values for game UI
-    private static final int DROPS_TO_FILL =      10; // How many drops needed to convert the rainfall into currency
+    private static final int DROPS_TO_FILL =      50; // How many drops needed to convert the rainfall into currency
     private static final float FALL_SPEED =       300f;
     private static final float BOWL_WIDTH =       400f;
     private static final float BOWL_HEIGHT =      200f;
@@ -59,7 +58,7 @@ public class GameScreen implements Screen {
     private Texture rainButtonTexture;
     private Texture autoButtonTexture;
     private Texture econButtonTexture;
-    private Texture ultButtonTexture;
+    private Texture abilitiesButtonTexture;
     private Texture prestigeButtonTexture;
     private Texture notUnlockedTexture;
     private Texture popupBgTexture;
@@ -154,7 +153,7 @@ public class GameScreen implements Screen {
         rainButtonTexture = new Texture("rain_upgrades_button.png");
         autoButtonTexture = new Texture("auto_upgrades_button.png");
         econButtonTexture = new Texture("econ_upgrades_button.png");
-        ultButtonTexture = new Texture("ult_upgrades_button.png");
+        abilitiesButtonTexture = new Texture("abilities_button.png");
         prestigeButtonTexture = new Texture("prestige_button.png");
         notUnlockedTexture = new Texture("not_unlocked_button.png");
 
@@ -170,9 +169,9 @@ public class GameScreen implements Screen {
         float startY = stageHeight - BTN_HEIGHT - 60f;
 
         addUpgradeButton(rainButtonTexture, btnX, startY - 0 * (BTN_HEIGHT + BTN_PADDING), "rain");
-        addUpgradeButton(autoButtonTexture, btnX, startY - 1 * (BTN_HEIGHT + BTN_PADDING), "auto");
-        addUpgradeButton(econButtonTexture, btnX, startY - 2 * (BTN_HEIGHT + BTN_PADDING), "econ");
-        addUpgradeButton(ultButtonTexture, btnX, startY - 3 * (BTN_HEIGHT + BTN_PADDING), "ult");
+        addUpgradeButton(econButtonTexture, btnX, startY - 1 * (BTN_HEIGHT + BTN_PADDING), "econ");
+        addUpgradeButton(autoButtonTexture, btnX, startY - 2 * (BTN_HEIGHT + BTN_PADDING), "auto");
+        addUpgradeButton(abilitiesButtonTexture, btnX, startY - 3 * (BTN_HEIGHT + BTN_PADDING), "ult");
         // Prestige pinned to bottom right
         addUpgradeButton(prestigeButtonTexture, btnX, 20f, "prestige");
     }
@@ -379,7 +378,7 @@ public class GameScreen implements Screen {
         rainButtonTexture.dispose();
         autoButtonTexture.dispose();
         econButtonTexture.dispose();
-        ultButtonTexture.dispose();
+        abilitiesButtonTexture.dispose();
         prestigeButtonTexture.dispose();
         notUnlockedTexture.dispose();
         popupBgTexture.dispose();
