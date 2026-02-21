@@ -6,7 +6,7 @@ import com.badlogic.gdx.Gdx;
 
 public class Storm extends com.badlogic.gdx.Game {
 
-    Music music;
+    public Music music;
 
     @Override
     public void create() {

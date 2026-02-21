@@ -16,6 +16,9 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
@@ -94,6 +97,10 @@ public class GameScreen implements Screen {
     private float bowlX;
     private float bowlY;
 
+    // Pause menu and exit confirmation
+    private Group pauseMenu = null;
+    private Group exitConfirm = null;
+
     // Accumulates drops from auto-rain
     private float autoRainAccumulator = 0f;
 
@@ -111,7 +118,20 @@ public class GameScreen implements Screen {
         batch = new SpriteBatch();
         rain = new Array<>();
 
-        Gdx.input.setInputProcessor(stage);
+        // Use a multiplexer so the stage and key listener both receive input
+        InputMultiplexer multiplexer = new InputMultiplexer();
+        multiplexer.addProcessor(stage);
+        multiplexer.addProcessor(new InputAdapter() {
+            @Override
+            public boolean keyDown(int keycode) {
+                if (keycode == Input.Keys.ESCAPE) {
+                    togglePauseMenu();
+                    return true;
+                }
+                return false;
+            }
+        });
+        Gdx.input.setInputProcessor(multiplexer);
         stage.getViewport().update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
         stageWidth  = stage.getWidth();
         stageHeight = stage.getHeight();
@@ -198,6 +218,205 @@ public class GameScreen implements Screen {
         rowPurchasedTexture =      makeColorTexture(0.15f, 0.35f, 0.20f, 1f);
         buyButtonTexture =         makeColorTexture(0.25f, 0.55f, 0.85f, 1f);
         buyButtonDisabledTexture = makeColorTexture(0.35f, 0.35f, 0.40f, 1f);
+    }
+
+    // Toggles pause menu open or closed
+    private void togglePauseMenu() {
+        if (pauseMenu != null) {
+            closePauseMenu();
+        } else {
+            openPauseMenu();
+        }
+    }
+
+    // Opens pause menu
+    private void openPauseMenu() {
+        // Close any open upgrade popup
+        if (activePopup != null) {
+            activePopup.remove();
+            activePopup = null;
+            activePopup = null;
+        }
+        pauseMenu = buildPauseMenu();
+        stage.addActor(pauseMenu);
+    }
+
+    // Closes pause menu
+    private void closePauseMenu() {
+        if (exitConfirm != null) {
+            exitConfirm.remove();
+            exitConfirm = null;
+        }
+        if (pauseMenu != null) {
+            pauseMenu.remove();
+            pauseMenu = null;
+        }
+    }
+
+    // Builds and returns the pause menu Group
+    private Group buildPauseMenu() {
+        float menuW = 340f;
+        float menuH = 280f;
+        float menuX = (stageWidth  / 2f) - (menuW / 2f);
+        float menuY = (stageHeight / 2f) - (menuH / 2f);
+
+        Group menu = new Group();
+        menu.setSize(menuW, menuH);
+        menu.setPosition(menuX, menuY);
+
+        // Background
+        Image bg = new Image(makeColorTexture(0.08f, 0.08f, 0.12f, 0.97f));
+        bg.setSize(menuW, menuH);
+        menu.addActor(bg);
+
+        // Title
+        BitmapFont titleFont = new BitmapFont();
+        titleFont.getData().setScale(1.8f);
+        Label.LabelStyle titleStyle = new Label.LabelStyle(titleFont, Color.WHITE);
+        Label title = new Label("PAUSED", titleStyle);
+        title.setPosition((menuW / 2f) - (title.getPrefWidth() / 2f), menuH - 45f);
+        menu.addActor(title);
+
+        // Volume label
+        BitmapFont labelFont = new BitmapFont();
+        Label.LabelStyle labelStyle = new Label.LabelStyle(labelFont, Color.LIGHT_GRAY);
+        Label volLabel = new Label("Music Volume", labelStyle);
+        volLabel.setPosition(20f, menuH - 90f);
+        menu.addActor(volLabel);
+
+        // Volume slider
+        Slider.SliderStyle sliderStyle = createVolumeSliderStyle();
+        Slider volumeSlider = new Slider(0f, 1f, 0.01f, false, sliderStyle);
+        volumeSlider.setValue(game.music != null ? game.music.getVolume() : 0.5f);
+        volumeSlider.setSize(menuW - 40f, 16f);
+        volumeSlider.setPosition(20f, menuH - 125f);
+        volumeSlider.addListener(event -> {
+            if (game.music != null) game.music.setVolume(volumeSlider.getValue());
+            return false;
+        });
+        menu.addActor(volumeSlider);
+
+        // Resume button
+        Image resumeBtn = new Image(makeColorTexture(0.2f, 0.5f, 0.25f, 1f));
+        resumeBtn.setSize(130f, 40f);
+        resumeBtn.setPosition(20f, 50f);
+        resumeBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                closePauseMenu();
+            }
+        });
+        menu.addActor(resumeBtn);
+
+        BitmapFont btnFont = new BitmapFont();
+        Label.LabelStyle btnStyle = new Label.LabelStyle(btnFont, Color.WHITE);
+        Label resumeLabel = new Label("Resume", btnStyle);
+        resumeLabel.setPosition(
+            20f  + (130f / 2f) - (resumeLabel.getPrefWidth()  / 2f),
+            50f  + (40f  / 2f) - (resumeLabel.getPrefHeight() / 2f)
+        );
+        menu.addActor(resumeLabel);
+
+        // Exit button
+        Image exitBtn = new Image(makeColorTexture(0.55f, 0.15f, 0.15f, 1f));
+        exitBtn.setSize(130f, 40f);
+        exitBtn.setPosition(menuW - 150f, 50f);
+        exitBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                showExitConfirmation();
+            }
+        });
+        menu.addActor(exitBtn);
+
+        Label exitLabel = new Label("Exit", new Label.LabelStyle(new BitmapFont(), Color.WHITE));
+        exitLabel.setPosition(
+            (menuW - 150f) + (130f / 2f) - (exitLabel.getPrefWidth()  / 2f),
+            50f             + (40f  / 2f) - (exitLabel.getPrefHeight() / 2f)
+        );
+        menu.addActor(exitLabel);
+
+        return menu;
+    }
+
+    // Builds a volume slider style with a filled blue bar
+    private Slider.SliderStyle createVolumeSliderStyle() {
+        Drawable bg       = new TextureRegionDrawable(new TextureRegion(makeColorTexture(0.25f, 0.25f, 0.3f, 1f)));
+        Drawable knob     = new TextureRegionDrawable(new TextureRegion(makeColorTexture(1f,    1f,    1f,   1f)));
+        Drawable knobFill = new TextureRegionDrawable(new TextureRegion(makeColorTexture(0.3f,  0.6f,  1f,   1f)));
+
+        knob.setMinWidth(12f);
+        knob.setMinHeight(16f);
+
+        Slider.SliderStyle style = new Slider.SliderStyle(bg, knob);
+        style.knobBefore = knobFill;
+        return style;
+    }
+
+    // Shows the exit confirmation dialog on top of the pause menu
+    private void showExitConfirmation() {
+        // Only one confirmation at a time
+        if (exitConfirm != null) return;
+
+        float w = 280f;
+        float h = 160f;
+        float x = (stageWidth  / 2f) - (w / 2f);
+        float y = (stageHeight / 2f) - (h / 2f);
+
+        exitConfirm = new Group();
+        exitConfirm.setSize(w, h);
+        exitConfirm.setPosition(x, y);
+
+        // Background — slightly different shade so it reads as a new layer
+        Image bg = new Image(makeColorTexture(0.05f, 0.05f, 0.1f, 1f));
+        bg.setSize(w, h);
+        exitConfirm.addActor(bg);
+
+        // Message
+        BitmapFont msgFont = new BitmapFont();
+        Label.LabelStyle msgStyle = new Label.LabelStyle(msgFont, Color.WHITE);
+        Label msg = new Label("Are you sure you want to exit?", msgStyle);
+        msg.setWrap(true);
+        msg.setWidth(w - 20f);
+        msg.setPosition(10f, h - 50f);
+        exitConfirm.addActor(msg);
+
+        // Confirm exit button
+        Image confirmBtn = new Image(makeColorTexture(0.55f, 0.15f, 0.15f, 1f));
+        confirmBtn.setSize(110f, 36f);
+        confirmBtn.setPosition(15f, 20f);
+        confirmBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.exit();
+            }
+        });
+        exitConfirm.addActor(confirmBtn);
+
+        Label confirmLabel = new Label("Exit", new Label.LabelStyle(new BitmapFont(), Color.WHITE));
+        confirmLabel.setPosition(
+            15f  + (110f / 2f) - (confirmLabel.getPrefWidth()  / 2f),
+            20f  + (36f  / 2f) - (confirmLabel.getPrefHeight() / 2f)
+        );
+        exitConfirm.addActor(confirmLabel);
+
+        // Cancel button
+        Image cancelBtn = new Image(makeColorTexture(0.2f, 0.2f, 0.25f, 1f));
+        cancelBtn.setSize(110f, 36f);
+        cancelBtn.setPosition(w - 125f, 20f);
+        cancelBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                exitConfirm.remove();
+                exitConfirm = null;
+            }
+        });
+        exitConfirm.addActor(cancelBtn);
+
+        Label cancelLabel = new Label("Cancel", new Label.LabelStyle(new BitmapFont(), Color.WHITE));
+        cancelLabel.setPosition(
+            (w - 125f) + (110f / 2f) - (cancelLabel.getPrefWidth()  / 2f),
+            20f         + (36f  / 2f) - (cancelLabel.getPrefHeight() / 2f)
+        );
+        exitConfirm.addActor(cancelLabel);
+
+        stage.addActor(exitConfirm);
     }
 
     // Creates a 1x1 Texture filled with the given RGBA color

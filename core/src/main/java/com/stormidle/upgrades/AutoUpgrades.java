@@ -1,7 +1,6 @@
 package com.stormidle.upgrades;
 
 import com.badlogic.gdx.utils.Array;
-import com.stormidle.objects.GameData;
 
 // Manages the "Auto" upgrade trees
 // There is only one upgrade tree here for now, still brainstorming other possible upgrades
