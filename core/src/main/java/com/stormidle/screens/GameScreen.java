@@ -19,6 +19,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
@@ -234,7 +235,7 @@ public class GameScreen implements Screen {
         // Close any open upgrade popup
         if (activePopup != null) {
             activePopup.remove();
-            activePopup = null;
+            activePopupType = null;
             activePopup = null;
         }
         pauseMenu = buildPauseMenu();
@@ -314,6 +315,7 @@ public class GameScreen implements Screen {
             20f  + (130f / 2f) - (resumeLabel.getPrefWidth()  / 2f),
             50f  + (40f  / 2f) - (resumeLabel.getPrefHeight() / 2f)
         );
+        resumeLabel.setTouchable(Touchable.disabled);
         menu.addActor(resumeLabel);
 
         // Exit button
@@ -332,6 +334,7 @@ public class GameScreen implements Screen {
             (menuW - 150f) + (130f / 2f) - (exitLabel.getPrefWidth()  / 2f),
             50f             + (40f  / 2f) - (exitLabel.getPrefHeight() / 2f)
         );
+        exitLabel.setTouchable(Touchable.disabled);
         menu.addActor(exitLabel);
 
         return menu;
@@ -395,6 +398,7 @@ public class GameScreen implements Screen {
             15f  + (110f / 2f) - (confirmLabel.getPrefWidth()  / 2f),
             20f  + (36f  / 2f) - (confirmLabel.getPrefHeight() / 2f)
         );
+        confirmLabel.setTouchable(Touchable.disabled);
         exitConfirm.addActor(confirmLabel);
 
         // Cancel button
@@ -414,6 +418,7 @@ public class GameScreen implements Screen {
             (w - 125f) + (110f / 2f) - (cancelLabel.getPrefWidth()  / 2f),
             20f         + (36f  / 2f) - (cancelLabel.getPrefHeight() / 2f)
         );
+        cancelLabel.setTouchable(Touchable.disabled);
         exitConfirm.addActor(cancelLabel);
 
         stage.addActor(exitConfirm);
@@ -662,6 +667,7 @@ public class GameScreen implements Screen {
                 btnX + (BTN_BUY_W / 2f) - (btnLabel.getPrefWidth()  / 2f),
                 6f   + (BTN_BUY_H / 2f) - (btnLabel.getPrefHeight() / 2f)
             );
+            btnLabel.setTouchable(Touchable.disabled);
             row.addActor(btnLabel);
 
             buyBtn.addListener(new ClickListener() {
