@@ -25,8 +25,8 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
 import com.stormidle.objects.GameData;
 import com.stormidle.upgrades.UpgradeTier;
-import com.stormidle.upgrades.RainUpgrades;
-import com.stormidle.upgrades.AutoUpgrades;
+import com.stormidle.upgrades.UpgradeManager;
+import com.stormidle.save.SaveManager;
 
 public class GameScreen implements Screen {
 
@@ -59,8 +59,7 @@ public class GameScreen implements Screen {
     private Stage stage = new Stage(new ScreenViewport());
     private SpriteBatch batch;
     private GameData gameData = new GameData();
-    private RainUpgrades rainUpgrades = new RainUpgrades();
-    private AutoUpgrades autoUpgrades = new AutoUpgrades();
+    private UpgradeManager upgrades = new UpgradeManager();
 
     // Sprite textures
     private Texture cloudTexture;
@@ -105,6 +104,10 @@ public class GameScreen implements Screen {
     // Accumulates drops from auto-rain
     private float autoRainAccumulator = 0f;
 
+    // Auto-save variables
+    private float autosaveTimer = 0f;
+    private static final float AUTOSAVE_INTERVAL = 30f;
+
     // Variables used to position sprites
     private float stageWidth;
     private float stageHeight;
@@ -118,6 +121,8 @@ public class GameScreen implements Screen {
         // Initialize batch and rain array
         batch = new SpriteBatch();
         rain = new Array<>();
+
+        SaveManager.load(gameData, upgrades);
 
         // Use a multiplexer so the stage and key listener both receive input
         InputMultiplexer multiplexer = new InputMultiplexer();
@@ -388,6 +393,7 @@ public class GameScreen implements Screen {
         confirmBtn.setPosition(15f, 20f);
         confirmBtn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent event, float x, float y) {
+                SaveManager.save(gameData, upgrades);
                 Gdx.app.exit();
             }
         });
@@ -506,12 +512,12 @@ public class GameScreen implements Screen {
         if ("rain".equals(type)) {
             buildPopupContent(popup,
                 new String[][]{{"Rain Fall Speed"}, {"Rain Value"}},
-                new Array[]{rainUpgrades.speedTree, rainUpgrades.bowlTree}
+                new Array[]{upgrades.rain.speedTree, upgrades.rain.bowlTree}
             );
         } else if ("auto".equals(type)) {
             buildPopupContent(popup,
                 new String[][]{{"Rain Generation"}},
-                new Array[]{autoUpgrades.autoTree}
+                new Array[]{upgrades.auto.autoTree}
             );
         } else {
             BitmapFont bodyFont = new BitmapFont();
@@ -772,6 +778,13 @@ public class GameScreen implements Screen {
         stage.act(delta);
         stage.draw();
 
+        // Autosave timer - can tweak by changing the AUTOSAVE_INTERVAL value
+        autosaveTimer += delta;
+        if (autosaveTimer >= AUTOSAVE_INTERVAL) {
+            autosaveTimer = 0f;
+            SaveManager.save(gameData, upgrades);
+        }
+
         // Auto-rain based on rps (rainfall per second) in GameData.java
         if (gameData.rps > 0) {
             autoRainAccumulator += gameData.rps * delta;
@@ -830,6 +843,8 @@ public class GameScreen implements Screen {
 
     @Override
     public void dispose() {
+        // Save game on close
+        SaveManager.save(gameData, upgrades);
         batch.dispose();
         stage.dispose();
         cloudTexture.dispose();

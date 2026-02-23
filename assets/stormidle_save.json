@@ -1,0 +1,9 @@
+{
+currency: 1
+fallSpeed: 350
+rps: 0.5
+purchasedUpgrades: [
+	speed_1
+	auto_1
+]
+}
