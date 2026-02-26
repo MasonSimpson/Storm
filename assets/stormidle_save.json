@@ -1,9 +1,13 @@
 {
-currency: 1
-fallSpeed: 350
+currency: 13
+fallSpeed: 450
+dropsToFill: 45
 rps: 0.5
+lastClosedTime: 1772122488
 purchasedUpgrades: [
 	speed_1
+	speed_2
+	value_1
 	auto_1
 ]
 }

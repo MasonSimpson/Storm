@@ -122,7 +122,7 @@ public class GameScreen implements Screen {
         batch = new SpriteBatch();
         rain = new Array<>();
 
-        SaveManager.load(gameData, upgrades);
+        SaveManager.OfflineResult offlineResult = SaveManager.load(gameData, upgrades);
 
         // Use a multiplexer so the stage and key listener both receive input
         InputMultiplexer multiplexer = new InputMultiplexer();
@@ -224,6 +224,86 @@ public class GameScreen implements Screen {
         rowPurchasedTexture =      makeColorTexture(0.15f, 0.35f, 0.20f, 1f);
         buyButtonTexture =         makeColorTexture(0.25f, 0.55f, 0.85f, 1f);
         buyButtonDisabledTexture = makeColorTexture(0.35f, 0.35f, 0.40f, 1f);
+
+        // Show offline progress popup if the player earned currency while away
+        if (offlineResult.hasProgress) {
+            stage.addActor(buildOfflinePopup(offlineResult));
+        }
+    }
+
+    // Builds the offline progress popup shown when the player returns after being away
+    private Group buildOfflinePopup(SaveManager.OfflineResult result) {
+        float w = 360f;
+        float h = 220f;
+        float x = (stageWidth  / 2f) - (w / 2f);
+        float y = (stageHeight / 2f) - (h / 2f);
+
+        Group popup = new Group();
+        popup.setSize(w, h);
+        popup.setPosition(x, y);
+
+        // Background
+        Image bg = new Image(makeColorTexture(0.08f, 0.08f, 0.12f, 0.97f));
+        bg.setSize(w, h);
+        popup.addActor(bg);
+
+        // Title
+        BitmapFont titleFont = new BitmapFont();
+        titleFont.getData().setScale(1.6f);
+        Label.LabelStyle titleStyle = new Label.LabelStyle(titleFont, Color.WHITE);
+        Label title = new Label("Welcome Back!", titleStyle);
+        title.setPosition((w / 2f) - (title.getPrefWidth() / 2f), h - 45f);
+        popup.addActor(title);
+
+        // Format the time away into a readable string
+        long seconds = result.secondsAway;
+        String timeAway;
+        if (seconds < 60) {
+            timeAway = seconds + " seconds";
+        } else if (seconds < 3600) {
+            timeAway = (seconds / 60) + " minutes";
+        } else {
+            timeAway = (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
+        }
+
+        // Time away label
+        BitmapFont bodyFont = new BitmapFont();
+        Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
+        Label timeLabel = new Label("You were away for " + timeAway, bodyStyle);
+        timeLabel.setPosition((w / 2f) - (timeLabel.getPrefWidth() / 2f), h - 90f);
+        popup.addActor(timeLabel);
+
+        // Currency earned label
+        BitmapFont earnedFont = new BitmapFont();
+        earnedFont.getData().setScale(1.3f);
+        Label.LabelStyle earnedStyle = new Label.LabelStyle(earnedFont, new Color(0.9f, 0.85f, 0.3f, 1f));
+        Label earnedLabel = new Label("+" + result.currencyEarned + " currency earned!", earnedStyle);
+        earnedLabel.setPosition((w / 2f) - (earnedLabel.getPrefWidth() / 2f), h - 135f);
+        popup.addActor(earnedLabel);
+
+        // Dismiss button
+        Image dismissBtn = new Image(makeColorTexture(0.2f, 0.5f, 0.25f, 1f));
+        dismissBtn.setSize(120f, 38f);
+        dismissBtn.setPosition((w / 2f) - 60f, 20f);
+        popup.addActor(dismissBtn);
+
+        Label dismissLabel = new Label("Collect", new Label.LabelStyle(new BitmapFont(), Color.WHITE));
+        dismissLabel.setPosition(
+            (w / 2f) - (dismissLabel.getPrefWidth()  / 2f),
+            20f      + (38f / 2f) - (dismissLabel.getPrefHeight() / 2f)
+        );
+        dismissLabel.setTouchable(Touchable.disabled);
+        popup.addActor(dismissLabel);
+
+        dismissBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                popup.remove();
+                // Currency was already added during load — just refresh the display
+                updateCurrencyDisplay();
+            }
+        });
+
+        return popup;
     }
 
     // Toggles pause menu open or closed
