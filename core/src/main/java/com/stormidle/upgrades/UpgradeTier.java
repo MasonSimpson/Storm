@@ -17,6 +17,8 @@ public class UpgradeTier {
     public static final String TREE_SPEED = "speed";
     public static final String TREE_VALUE = "value";
     public static final String TREE_AUTO = "auto";
+    public static final String TREE_CONVERSION  = "conversion";
+    public static final String TREE_CONDENSATION = "condensation";
 
     // Data fields
     public String tree; // Which tree this upgrade belongs to

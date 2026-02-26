@@ -104,6 +104,9 @@ public class GameScreen implements Screen {
     // Accumulates drops from auto-rain
     private float autoRainAccumulator = 0f;
 
+    // Accumulates currency from condensation
+    private float condensationAccumulator = 0f;
+
     // Auto-save variables
     private float autosaveTimer = 0f;
     private static final float AUTOSAVE_INTERVAL = 30f;
@@ -234,7 +237,7 @@ public class GameScreen implements Screen {
     // Builds the offline progress popup shown when the player returns after being away
     private Group buildOfflinePopup(SaveManager.OfflineResult result) {
         float w = 360f;
-        float h = 220f;
+        float h = 260f;
         float x = (stageWidth  / 2f) - (w / 2f);
         float y = (stageHeight / 2f) - (h / 2f);
 
@@ -255,7 +258,7 @@ public class GameScreen implements Screen {
         title.setPosition((w / 2f) - (title.getPrefWidth() / 2f), h - 45f);
         popup.addActor(title);
 
-        // Format the time away into a readable string
+        // Format time away into a readable string
         long seconds = result.secondsAway;
         String timeAway;
         if (seconds < 60) {
@@ -266,20 +269,32 @@ public class GameScreen implements Screen {
             timeAway = (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
         }
 
-        // Time away label
         BitmapFont bodyFont = new BitmapFont();
         Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
         Label timeLabel = new Label("You were away for " + timeAway, bodyStyle);
-        timeLabel.setPosition((w / 2f) - (timeLabel.getPrefWidth() / 2f), h - 90f);
+        timeLabel.setPosition((w / 2f) - (timeLabel.getPrefWidth() / 2f), h - 85f);
         popup.addActor(timeLabel);
 
-        // Currency earned label
-        BitmapFont earnedFont = new BitmapFont();
-        earnedFont.getData().setScale(1.3f);
-        Label.LabelStyle earnedStyle = new Label.LabelStyle(earnedFont, new Color(0.9f, 0.85f, 0.3f, 1f));
-        Label earnedLabel = new Label("+" + result.currencyEarned + " currency earned!", earnedStyle);
-        earnedLabel.setPosition((w / 2f) - (earnedLabel.getPrefWidth() / 2f), h - 135f);
-        popup.addActor(earnedLabel);
+        // Rainfall and condensation earnings shown separately
+        Color earnedColor = new Color(0.9f, 0.85f, 0.3f, 1f);
+
+        if (result.rainfallCurrency > 0) {
+            BitmapFont rainFont = new BitmapFont();
+            rainFont.getData().setScale(1.1f);
+            Label rainLabel = new Label("Rainfall:  +" + result.rainfallCurrency,
+                new Label.LabelStyle(rainFont, earnedColor));
+            rainLabel.setPosition((w / 2f) - (rainLabel.getPrefWidth() / 2f), h - 125f);
+            popup.addActor(rainLabel);
+        }
+
+        if (result.condensationCurrency > 0) {
+            BitmapFont condFont = new BitmapFont();
+            condFont.getData().setScale(1.1f);
+            Label condLabel = new Label("Condensation:  +" + result.condensationCurrency,
+                new Label.LabelStyle(condFont, earnedColor));
+            condLabel.setPosition((w / 2f) - (condLabel.getPrefWidth() / 2f), h - 160f);
+            popup.addActor(condLabel);
+        }
 
         // Dismiss button
         Image dismissBtn = new Image(makeColorTexture(0.2f, 0.5f, 0.25f, 1f));
@@ -298,7 +313,6 @@ public class GameScreen implements Screen {
         dismissBtn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent event, float x, float y) {
                 popup.remove();
-                // Currency was already added during load — just refresh the display
                 updateCurrencyDisplay();
             }
         });
@@ -599,6 +613,11 @@ public class GameScreen implements Screen {
                 new String[][]{{"Rain Generation"}},
                 new Array[]{upgrades.auto.autoTree}
             );
+        } else if ("econ".equals(type)) {
+            buildPopupContent(popup,
+                new String[][]{{"Silver Lining"}, {"Condensation"}},
+                new Array[]{upgrades.econ.conversionTree, upgrades.econ.condensationTree}
+            );
         } else {
             BitmapFont bodyFont = new BitmapFont();
             Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
@@ -874,6 +893,17 @@ public class GameScreen implements Screen {
             }
         }
 
+        // Condensation upgrade passively generates income
+        if (gameData.cps > 0) {
+            condensationAccumulator += gameData.cps * delta;
+            while (condensationAccumulator >= 1f) {
+                condensationAccumulator -= 1f;
+                gameData.currency++;
+                updateCurrencyDisplay();
+                if ("econ".equals(activePopupType)) refreshActivePopup();
+            }
+        }
+
         updateRainfall(delta);
 
         batch.begin();
@@ -907,10 +937,10 @@ public class GameScreen implements Screen {
         if (dropsCollected >= gameData.dropsToFill) {
             dropsCollected = 0;
             fillBar.setValue(0f);
-            gameData.currency++;
+            gameData.currency += gameData.currencyGained;
             updateCurrencyDisplay();
             // Refresh popup affordability after earning currency
-            if("rain".equals(activePopupType)) refreshActivePopup();
+            if("rain".equals(activePopupType) || "econ".equals(activePopupType)) refreshActivePopup();
         }
     }
 

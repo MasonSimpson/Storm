@@ -22,28 +22,28 @@ public class AutoUpgrades {
             "Rain Generation I",
             "Cloud auto generates 1 drop every 2 seconds",
             5,
-            g -> g.rps += 0.5f
+            g -> g.rps = 0.5f
         ));
         autoTree.add(new UpgradeTier(
             UpgradeTier.TREE_AUTO, 2,
             "Rain Generation II",
             "Increases raindrop generation to 1/second",
             50,
-            g -> g.rps += 1f
+            g -> g.rps = 1f
         ));
         autoTree.add(new UpgradeTier(
             UpgradeTier.TREE_AUTO, 3,
             "Rain Generation III",
             "Increases raindrop generation to 2/second",
             1000,
-            g -> g.rps += 2f
+            g -> g.rps = 2f
         ));
         autoTree.add(new UpgradeTier(
             UpgradeTier.TREE_AUTO, 4,
             "Rain Generation IV",
             "Increases raindrop generation to 5/second",
             100000,
-            g -> g.rps += 5f
+            g -> g.rps = 5f
         ));
         autoTree.add(new UpgradeTier(
             UpgradeTier.TREE_AUTO, 5,

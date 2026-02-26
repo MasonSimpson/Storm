@@ -12,6 +12,9 @@ public class GameData {
     public float fallSpeed = 300f;
     public int dropsToFill = 50;
     public float rps = 0; // Rain auto generated per second
+    public int currencyGained = 1; // Multiplier applied to bowl conversion payouts
+    public float cps = 0f; // Currency generated passively per second (condensation)
+
 
     // TODO: Add more upgrades and other data that needs to be saved
 

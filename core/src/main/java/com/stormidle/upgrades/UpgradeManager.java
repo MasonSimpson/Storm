@@ -10,6 +10,7 @@ public class UpgradeManager {
 
     public final RainUpgrades rain = new RainUpgrades();
     public final AutoUpgrades auto = new AutoUpgrades();
+    public final EconUpgrades econ = new EconUpgrades();
     // Add future upgrade trees here (e.g. econ, ult)
 
     // Returns all trees across all categories as a flat list of arrays.
@@ -21,6 +22,9 @@ public class UpgradeManager {
         all.add(rain.bowlTree);
         // Auto trees
         all.add(auto.autoTree);
+        // Econ trees
+        all.add(econ.conversionTree);
+        all.add(econ.condensationTree);
         // Add future trees here
         return all;
     }
