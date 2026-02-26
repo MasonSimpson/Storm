@@ -1,9 +1,9 @@
 {
-currency: 13
+currency: 39
 fallSpeed: 450
 dropsToFill: 45
 rps: 0.5
-lastClosedTime: 1772122488
+lastClosedTime: 1772124884
 purchasedUpgrades: [
 	speed_1
 	speed_2
