@@ -7,6 +7,7 @@ import com.badlogic.gdx.utils.Json;
 import com.stormidle.objects.GameData;
 import com.stormidle.upgrades.UpgradeManager;
 import com.stormidle.upgrades.UpgradeTier;
+import com.badlogic.gdx.utils.ObjectMap;
 
 // Handles saving and loading all game state to/from a JSON file.
 // Save format:
@@ -69,6 +70,13 @@ public class SaveManager {
             }
         }
 
+        // Ability cooldown timestamps stored as parallel arrays
+        for (ObjectMap.Entry<String, Long> entry : upgrades.abilities.getCooldownTimestamps()) {
+            data.cooldownIds.add(entry.key);
+            data.cooldownTimestamps.add(entry.value);
+        }
+
+
         Json json = new Json();
         String jsonString = json.prettyPrint(data);
 
@@ -110,6 +118,13 @@ public class SaveManager {
                     }
                 }
             }
+
+            // Restore ability cooldown timestamps
+            ObjectMap<String, Long> cooldowns = new ObjectMap<>();
+            for (int i = 0; i < data.cooldownIds.size; i++) {
+                cooldowns.put(data.cooldownIds.get(i), data.cooldownTimestamps.get(i));
+            }
+            upgrades.abilities.setCooldownTimestamps(cooldowns);
 
             // Calculate offline progress
             OfflineResult result = new OfflineResult(false, 0, 0, 0);
@@ -169,5 +184,7 @@ public class SaveManager {
         public int currencyEarned              = 1;
         public long lastClosedTime             = 0L;
         public Array<String> purchasedUpgrades = new Array<>();
+        public Array<String> cooldownIds        = new Array<>();
+        public Array<Long>   cooldownTimestamps = new Array<>();
     }
 }

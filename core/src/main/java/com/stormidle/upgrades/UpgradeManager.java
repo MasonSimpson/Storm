@@ -11,6 +11,7 @@ public class UpgradeManager {
     public final RainUpgrades rain = new RainUpgrades();
     public final AutoUpgrades auto = new AutoUpgrades();
     public final EconUpgrades econ = new EconUpgrades();
+    public final AbilityManager abilities = new AbilityManager();
     // Add future upgrade trees here (e.g. econ, ult)
 
     // Returns all trees across all categories as a flat list of arrays.

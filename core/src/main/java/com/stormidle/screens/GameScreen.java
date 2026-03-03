@@ -24,6 +24,8 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
 import com.stormidle.objects.GameData;
+import com.stormidle.upgrades.AbilityDefinition;
+import com.stormidle.upgrades.AbilityManager;
 import com.stormidle.upgrades.UpgradeTier;
 import com.stormidle.upgrades.UpgradeManager;
 import com.stormidle.save.SaveManager;
@@ -107,6 +109,11 @@ public class GameScreen implements Screen {
     // Accumulates currency from condensation
     private float condensationAccumulator = 0f;
 
+    // Active ability UI
+    private Label activeAbilityLabel;
+    private ProgressBar activeAbilityBar;
+    private Group activeAbilityGroup;
+
     // Auto-save variables
     private float autosaveTimer = 0f;
     private static final float AUTOSAVE_INTERVAL = 30f;
@@ -153,7 +160,11 @@ public class GameScreen implements Screen {
         cloud.addListener(new ClickListener() {
            @Override
            public void clicked(InputEvent event, float x, float y) {
-               rain.add(new Rain(cloud.getX(), cloud.getY(), gameData.fallSpeed));
+               int drops = upgrades.abilities.isHurricaneActive() ? 2 : 1;
+               for (int i = 0; i < drops; i++) {
+                   float xOffset = i * 20f; // second drop spawns 20px to the right
+                   rain.add(new Rain(cloud.getX() + xOffset, cloud.getY(), gameData.fallSpeed));
+               }
            }
         });
         stage.addActor(cloud);
@@ -191,6 +202,23 @@ public class GameScreen implements Screen {
 
         // Set initial positions of icon + label together
         updateCurrencyDisplay();
+
+        // Active ability display — sits below the currency label
+        activeAbilityGroup = new Group();
+        activeAbilityGroup.setVisible(false);
+
+        BitmapFont abilityFont = new BitmapFont();
+        Label.LabelStyle abilityStyle = new Label.LabelStyle(abilityFont, new Color(0.4f, 0.9f, 1f, 1f));
+        activeAbilityLabel = new Label("", abilityStyle);
+        activeAbilityLabel.setPosition(0, 0);
+        activeAbilityGroup.addActor(activeAbilityLabel);
+
+        activeAbilityBar = new ProgressBar(0f, 1f, 0.01f, false, createFillBarStyle());
+        activeAbilityBar.setSize(160f, 6f);
+        activeAbilityBar.setPosition(0, -12f);
+        activeAbilityGroup.addActor(activeAbilityBar);
+
+        stage.addActor(activeAbilityGroup);
 
         // Rain texture
         rainTexture = new Texture("rain.png");
@@ -618,6 +646,8 @@ public class GameScreen implements Screen {
                 new String[][]{{"Silver Lining"}, {"Condensation"}},
                 new Array[]{upgrades.econ.conversionTree, upgrades.econ.condensationTree}
             );
+        } else if ("ult".equals(type)) {
+            buildAbilityPopupContent(popup);
         } else {
             BitmapFont bodyFont = new BitmapFont();
             Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
@@ -685,6 +715,110 @@ public class GameScreen implements Screen {
 
         // Give scroll pane immediate focus so player can scroll without having to click
         stage.setScrollFocus(scrollPane);
+    }
+
+    private void buildAbilityPopupContent(Group popup) {
+        float scrollW = POPUP_WIDTH - POPUP_PADDING * 2f;
+        float scrollH = POPUP_HEIGHT - HEADER_H - POPUP_PADDING * 2f;
+
+        BitmapFont font = new BitmapFont();
+        Table content = new Table();
+        content.top().left();
+        content.defaults().left();
+
+        for (AbilityDefinition def : upgrades.abilities.abilities) {
+            content.add(buildAbilityRow(def, font, scrollW))
+                .width(scrollW).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
+        }
+
+        ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
+        ScrollPane scrollPane = new ScrollPane(content, spStyle);
+        scrollPane.setScrollingDisabled(true, false);
+        scrollPane.setOverscroll(false, false);
+        scrollPane.setFadeScrollBars(true);
+        scrollPane.setSize(scrollW, scrollH);
+        scrollPane.setPosition(POPUP_PADDING, POPUP_PADDING);
+        popup.addActor(scrollPane);
+        stage.setScrollFocus(scrollPane);
+    }
+
+    private Group buildAbilityRow(AbilityDefinition def, BitmapFont font, float rowWidth) {
+        boolean anyActive    = upgrades.abilities.isAnyAbilityActive();
+        boolean onCooldown   = upgrades.abilities.isOnCooldown(def.id);
+        boolean canAfford    = gameData.currency >= def.cost;
+        // Blocked if another ability is active, or this one is on cooldown, or can't afford
+        boolean canBuy       = !anyActive && !onCooldown && canAfford;
+
+        Group row = new Group();
+        row.setSize(rowWidth, ROW_HEIGHT);
+
+        Image rowBg = new Image(onCooldown ? rowLockedTexture : rowTexture);
+        rowBg.setSize(rowWidth, ROW_HEIGHT);
+        row.addActor(rowBg);
+
+        // Name
+        Label.LabelStyle nameStyle = new Label.LabelStyle(font, onCooldown ? Color.DARK_GRAY : Color.WHITE);
+        Label nameLabel = new Label(def.name, nameStyle);
+        nameLabel.setPosition(6f, ROW_HEIGHT - nameLabel.getPrefHeight() - 4f);
+        row.addActor(nameLabel);
+
+        // Description
+        BitmapFont descFont = new BitmapFont();
+        Label descLabel = new Label(def.description,
+            new Label.LabelStyle(descFont, onCooldown ? Color.DARK_GRAY : Color.LIGHT_GRAY));
+        descLabel.setPosition(6f, 6f);
+        row.addActor(descLabel);
+
+        float btnX = rowWidth - BTN_BUY_W - 6f;
+
+        if (onCooldown) {
+            // Show remaining cooldown time
+            float remaining  = upgrades.abilities.getCooldownRemaining(def.id);
+            int mins         = (int)(remaining / 60);
+            int secs         = (int)(remaining % 60);
+            String cdText    = String.format("%d:%02d", mins, secs);
+            BitmapFont cdFont = new BitmapFont();
+            Label cdLabel = new Label(cdText, new Label.LabelStyle(cdFont, Color.GRAY));
+            cdLabel.setPosition(btnX + (BTN_BUY_W / 2f) - (cdLabel.getPrefWidth() / 2f),
+                (ROW_HEIGHT / 2f) - (cdLabel.getPrefHeight() / 2f));
+            row.addActor(cdLabel);
+        } else {
+            // Cost label
+            BitmapFont costFont = new BitmapFont();
+            Label costLabel = new Label(def.cost + " drops",
+                new Label.LabelStyle(costFont, canAfford ? new Color(0.9f, 0.85f, 0.3f, 1f) : Color.RED));
+            costLabel.setPosition(btnX, BTN_BUY_H + 10f);
+            row.addActor(costLabel);
+
+            // Buy button
+            Image buyBtn = new Image(canBuy ? buyButtonTexture : buyButtonDisabledTexture);
+            buyBtn.setSize(BTN_BUY_W, BTN_BUY_H);
+            buyBtn.setPosition(btnX, 6f);
+            row.addActor(buyBtn);
+
+            BitmapFont btnFont = new BitmapFont();
+            Label btnLabel = new Label(anyActive ? "Active" : "Buy",
+                new Label.LabelStyle(btnFont, Color.WHITE));
+            btnLabel.setPosition(
+                btnX + (BTN_BUY_W / 2f) - (btnLabel.getPrefWidth()  / 2f),
+                6f   + (BTN_BUY_H / 2f) - (btnLabel.getPrefHeight() / 2f));
+            btnLabel.setTouchable(Touchable.disabled);
+            row.addActor(btnLabel);
+
+            if (canBuy) {
+                buyBtn.addListener(new ClickListener() {
+                    @Override public void clicked(InputEvent event, float x, float y) {
+                        boolean activated = upgrades.abilities.tryActivate(def.id, gameData);
+                        if (activated) {
+                            updateCurrencyDisplay();
+                            refreshActivePopup();
+                        }
+                    }
+                });
+            }
+        }
+
+        return row;
     }
 
     // Draws a section header label to the content table
@@ -884,12 +1018,35 @@ public class GameScreen implements Screen {
             SaveManager.save(gameData, upgrades);
         }
 
+        // Tick active ability timer
+        upgrades.abilities.tick(delta, gameData);
+
+        // Update active ability UI
+        AbilityDefinition active = upgrades.abilities.getActiveAbility();
+        if (active != null) {
+            activeAbilityGroup.setVisible(true);
+            float remaining  = upgrades.abilities.getActiveTimeRemaining();
+            float labelW     = activeAbilityLabel.getPrefWidth();
+            float groupX     = (stageWidth / 2f) - (Math.max(labelW, 160f) / 2f);
+            float groupY     = stageHeight - currencyLabel.getPrefHeight() - 60f;
+            activeAbilityGroup.setPosition(groupX, groupY);
+            activeAbilityLabel.setText(active.name + " (" + (int)remaining + "s)");
+            activeAbilityBar.setRange(0f, active.duration);
+            activeAbilityBar.setValue(remaining);
+        } else {
+            activeAbilityGroup.setVisible(false);
+        }
+
         // Auto-rain based on rps (rainfall per second) in GameData.java
         if (gameData.rps > 0) {
             autoRainAccumulator += gameData.rps * delta;
             while (autoRainAccumulator >= 1f) {
                 autoRainAccumulator -= 1f;
-                rain.add(new Rain(cloud.getX(), cloud.getY(), gameData.fallSpeed));
+                int drops = upgrades.abilities.isHurricaneActive() ? 2 : 1;
+                for (int i = 0; i < drops; i++) {
+                    float xOffset = i * 20f; // second drop spawns 20px to the right
+                    rain.add(new Rain(cloud.getX() + xOffset, cloud.getY(), gameData.fallSpeed));
+                }
             }
         }
 
@@ -905,6 +1062,9 @@ public class GameScreen implements Screen {
         }
 
         updateRainfall(delta);
+
+        // Constantly refreshes the ability popup screen so that the timers update
+        if ("ult".equals(activePopupType)) refreshActivePopup();
 
         batch.begin();
         for (Rain drop : rain) {
