@@ -48,13 +48,13 @@ public class GameScreen implements Screen {
     private static final float POPUP_HEIGHT =     600f;
 
     // Upgrade row layout inside upgrade popup
-    private static final float ROW_HEIGHT =       80f;
-    private static final float ROW_PADDING =       8f;
-    private static final float ROW_MARGIN =       10f;
-    private static final float BTN_BUY_W =        70f;
-    private static final float BTN_BUY_H =        30f;
-    private static final float HEADER_H =         40f; // Height reserved for title + close button
-    private static final float POPUP_PADDING =     8f; // Padding around scroll pane
+    public static final float ROW_HEIGHT =       80f;
+    public static final float ROW_PADDING =       8f;
+    public static final float ROW_MARGIN =       10f;
+    public static final float BTN_BUY_W =        70f;
+    public static final float BTN_BUY_H =        30f;
+    public static final float HEADER_H =         40f; // Height reserved for title + close button
+    public static final float POPUP_PADDING =     8f; // Padding around scroll pane
 
     // Core of game
     private final com.stormidle.Storm game;
@@ -597,11 +597,14 @@ public class GameScreen implements Screen {
     // so button states can refresh
     private void refreshActivePopup() {
         if (activePopup == null) return;
-        String type = activePopupType;
-        activePopup.remove();
-        activePopup     = buildPopup(type);
-        activePopupType = type;
-        stage.addActor(activePopup);
+        for (com.badlogic.gdx.scenes.scene2d.Actor a : activePopup.getChildren()) {
+            if (!(a instanceof ScrollPane)) continue;
+            Table content = (Table) ((ScrollPane) a).getWidget();
+            for (com.badlogic.gdx.scenes.scene2d.Actor row : content.getChildren()) {
+                if (row instanceof Refreshable) ((Refreshable) row).refresh();
+            }
+            break;
+        }
     }
 
     // Helper function that builds and returns a popup Group for the given upgrade category
@@ -693,42 +696,22 @@ public class GameScreen implements Screen {
         content.top().left();
         content.defaults().left();
 
-        // Iterate over each tree, drawing a section header followed by its upgrade rows
         for (int t = 0; t < trees.length; t++) {
-            if (t > 0) content.add().height(ROW_PADDING * 2f).row(); // gap between trees
+            if (t > 0) content.add().height(ROW_PADDING * 2f).row();
             addSectionHeader(content, sections[t][0], headerFont, scrollW);
             for (int i = 0; i < trees[t].size; i++) {
-                addUpgradeRow(content, font, trees[t], i, scrollW);
+                UpgradeRow row = new UpgradeRow(
+                    trees[t], i, gameData, scrollW, font,
+                    rowTexture, rowLockedTexture, rowPurchasedTexture,
+                    buyButtonTexture, buyButtonDisabledTexture,
+                    () -> {                          // PurchaseCallback
+                        updateFillBar();
+                        updateCurrencyDisplay();
+                        refreshActivePopup();
+                    }
+                );
+                content.add(row).width(scrollW).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
             }
-        }
-
-        // Wrap content in a ScrollPane
-        ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
-        ScrollPane scrollPane = new ScrollPane(content, spStyle);
-        scrollPane.setScrollingDisabled(true, false); // Horizontal scrolling disabled, vertical scrolling on
-        scrollPane.setOverscroll(false, false);
-        scrollPane.setFadeScrollBars(true);
-        scrollPane.setSize(scrollW, scrollH);
-        scrollPane.setPosition(POPUP_PADDING, POPUP_PADDING);
-
-        popup.addActor(scrollPane);
-
-        // Give scroll pane immediate focus so player can scroll without having to click
-        stage.setScrollFocus(scrollPane);
-    }
-
-    private void buildAbilityPopupContent(Group popup) {
-        float scrollW = POPUP_WIDTH - POPUP_PADDING * 2f;
-        float scrollH = POPUP_HEIGHT - HEADER_H - POPUP_PADDING * 2f;
-
-        BitmapFont font = new BitmapFont();
-        Table content = new Table();
-        content.top().left();
-        content.defaults().left();
-
-        for (AbilityDefinition def : upgrades.abilities.abilities) {
-            content.add(buildAbilityRow(def, font, scrollW))
-                .width(scrollW).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
         }
 
         ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
@@ -742,83 +725,37 @@ public class GameScreen implements Screen {
         stage.setScrollFocus(scrollPane);
     }
 
-    private Group buildAbilityRow(AbilityDefinition def, BitmapFont font, float rowWidth) {
-        boolean anyActive    = upgrades.abilities.isAnyAbilityActive();
-        boolean onCooldown   = upgrades.abilities.isOnCooldown(def.id);
-        boolean canAfford    = gameData.currency >= def.cost;
-        // Blocked if another ability is active, or this one is on cooldown, or can't afford
-        boolean canBuy       = !anyActive && !onCooldown && canAfford;
+    private void buildAbilityPopupContent(Group popup) {
+        float scrollW = POPUP_WIDTH  - POPUP_PADDING * 2f;
+        float scrollH = POPUP_HEIGHT - HEADER_H - POPUP_PADDING * 2f;
 
-        Group row = new Group();
-        row.setSize(rowWidth, ROW_HEIGHT);
+        BitmapFont font = new BitmapFont();
+        Table content = new Table();
+        content.top().left();
+        content.defaults().left();
 
-        Image rowBg = new Image(onCooldown ? rowLockedTexture : rowTexture);
-        rowBg.setSize(rowWidth, ROW_HEIGHT);
-        row.addActor(rowBg);
-
-        // Name
-        Label.LabelStyle nameStyle = new Label.LabelStyle(font, onCooldown ? Color.DARK_GRAY : Color.WHITE);
-        Label nameLabel = new Label(def.name, nameStyle);
-        nameLabel.setPosition(6f, ROW_HEIGHT - nameLabel.getPrefHeight() - 4f);
-        row.addActor(nameLabel);
-
-        // Description
-        BitmapFont descFont = new BitmapFont();
-        Label descLabel = new Label(def.description,
-            new Label.LabelStyle(descFont, onCooldown ? Color.DARK_GRAY : Color.LIGHT_GRAY));
-        descLabel.setPosition(6f, 6f);
-        row.addActor(descLabel);
-
-        float btnX = rowWidth - BTN_BUY_W - 6f;
-
-        if (onCooldown) {
-            // Show remaining cooldown time
-            float remaining  = upgrades.abilities.getCooldownRemaining(def.id);
-            int mins         = (int)(remaining / 60);
-            int secs         = (int)(remaining % 60);
-            String cdText    = String.format("%d:%02d", mins, secs);
-            BitmapFont cdFont = new BitmapFont();
-            Label cdLabel = new Label(cdText, new Label.LabelStyle(cdFont, Color.GRAY));
-            cdLabel.setPosition(btnX + (BTN_BUY_W / 2f) - (cdLabel.getPrefWidth() / 2f),
-                (ROW_HEIGHT / 2f) - (cdLabel.getPrefHeight() / 2f));
-            row.addActor(cdLabel);
-        } else {
-            // Cost label
-            BitmapFont costFont = new BitmapFont();
-            Label costLabel = new Label(def.cost + " drops",
-                new Label.LabelStyle(costFont, canAfford ? new Color(0.9f, 0.85f, 0.3f, 1f) : Color.RED));
-            costLabel.setPosition(btnX, BTN_BUY_H + 10f);
-            row.addActor(costLabel);
-
-            // Buy button
-            Image buyBtn = new Image(canBuy ? buyButtonTexture : buyButtonDisabledTexture);
-            buyBtn.setSize(BTN_BUY_W, BTN_BUY_H);
-            buyBtn.setPosition(btnX, 6f);
-            row.addActor(buyBtn);
-
-            BitmapFont btnFont = new BitmapFont();
-            Label btnLabel = new Label(anyActive ? "Active" : "Buy",
-                new Label.LabelStyle(btnFont, Color.WHITE));
-            btnLabel.setPosition(
-                btnX + (BTN_BUY_W / 2f) - (btnLabel.getPrefWidth()  / 2f),
-                6f   + (BTN_BUY_H / 2f) - (btnLabel.getPrefHeight() / 2f));
-            btnLabel.setTouchable(Touchable.disabled);
-            row.addActor(btnLabel);
-
-            if (canBuy) {
-                buyBtn.addListener(new ClickListener() {
-                    @Override public void clicked(InputEvent event, float x, float y) {
-                        boolean activated = upgrades.abilities.tryActivate(def.id, gameData);
-                        if (activated) {
-                            updateCurrencyDisplay();
-                            refreshActivePopup();
-                        }
-                    }
-                });
-            }
+        for (AbilityDefinition def : upgrades.abilities.abilities) {
+            AbilityRow row = new AbilityRow(
+                def, upgrades.abilities, gameData, scrollW, font,
+                rowTexture, rowLockedTexture,
+                buyButtonTexture, buyButtonDisabledTexture,
+                () -> {                              // ActivateCallback
+                    updateCurrencyDisplay();
+                    refreshActivePopup();
+                }
+            );
+            content.add(row).width(scrollW).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
         }
 
-        return row;
+        ScrollPane.ScrollPaneStyle spStyle = new ScrollPane.ScrollPaneStyle();
+        ScrollPane scrollPane = new ScrollPane(content, spStyle);
+        scrollPane.setScrollingDisabled(true, false);
+        scrollPane.setOverscroll(false, false);
+        scrollPane.setFadeScrollBars(true);
+        scrollPane.setSize(scrollW, scrollH);
+        scrollPane.setPosition(POPUP_PADDING, POPUP_PADDING);
+        popup.addActor(scrollPane);
+        stage.setScrollFocus(scrollPane);
     }
 
     // Draws a section header label to the content table
@@ -826,115 +763,6 @@ public class GameScreen implements Screen {
         Label.LabelStyle style = new Label.LabelStyle(font, new Color(0.6f, 0.85f, 1f, 1f));
         Label header = new Label(text, style);
         content.add(header).width(rowWidth).padTop(ROW_PADDING).padBottom(4f).row();
-    }
-
-    // Draws one upgrade row for the given tree/index. Returns the new Y below it.
-    // Row states:
-    // * PURCHASED - green tint, no buy button
-    // * UNLOCKED - normal tint, buy button (greyed if not affordable)
-    // * LOCKED - dark tint, padlock label, no buy button
-    private void addUpgradeRow(Table content, BitmapFont font,
-                               final Array<UpgradeTier> tree, final int index, float rowWidth) {
-        UpgradeTier upgrade  = tree.get(index);
-        UpgradeTier previous = UpgradeTier.previous(tree, index);
-        boolean purchased = upgrade.purchased;
-        boolean unlocked  = upgrade.isUnlocked(previous);
-        boolean canAfford = gameData.currency >= upgrade.cost;
-
-        // Outer group sized to ROW_HEIGHT so we can layer background + widgets
-        Group row = new Group();
-        row.setSize(rowWidth, ROW_HEIGHT);
-
-        // Background
-        Texture bgTex = purchased ? rowPurchasedTexture
-            : unlocked  ? rowTexture
-            : rowLockedTexture;
-        Image rowBg = new Image(bgTex);
-        rowBg.setSize(rowWidth, ROW_HEIGHT);
-        row.addActor(rowBg);
-
-        // Upgrade name
-        Color nameColor = purchased ? Color.GREEN
-            : unlocked  ? Color.WHITE
-            : Color.DARK_GRAY;
-        Label.LabelStyle nameStyle = new Label.LabelStyle(font, nameColor);
-        Label nameLabel = new Label(upgrade.name, nameStyle);
-        nameLabel.setPosition(6f, ROW_HEIGHT - nameLabel.getPrefHeight() - 4f);
-        row.addActor(nameLabel);
-
-        // Description
-        BitmapFont descFont = new BitmapFont();
-        Label.LabelStyle descStyle = new Label.LabelStyle(descFont,
-            unlocked ? Color.LIGHT_GRAY : Color.DARK_GRAY);
-        Label descLabel = new Label(upgrade.description, descStyle);
-        descLabel.setPosition(6f, 6f);
-        row.addActor(descLabel);
-
-        // Right-side widget varies by state
-        if (purchased) {
-            BitmapFont badgeFont = new BitmapFont();
-            Label.LabelStyle badgeStyle = new Label.LabelStyle(badgeFont, Color.GREEN);
-            Label badge = new Label("Purchased", badgeStyle);
-            badge.setPosition(
-                rowWidth - badge.getPrefWidth() - 6f,
-                (ROW_HEIGHT / 2f) - (badge.getPrefHeight() / 2f)
-            );
-            row.addActor(badge);
-
-        } else if (unlocked) {
-            float btnX = rowWidth - BTN_BUY_W - 6f;
-
-            // Cost label
-            BitmapFont costFont = new BitmapFont();
-            Label.LabelStyle costStyle = new Label.LabelStyle(costFont,
-                canAfford ? new Color(0.9f, 0.85f, 0.3f, 1f) : Color.RED);
-            Label costLabel = new Label(upgrade.cost + " drops", costStyle);
-            costLabel.setPosition(btnX, BTN_BUY_H + 10f);
-            row.addActor(costLabel);
-
-            // Buy button background
-            Image buyBtn = new Image(canAfford ? buyButtonTexture : buyButtonDisabledTexture);
-            buyBtn.setSize(BTN_BUY_W, BTN_BUY_H);
-            buyBtn.setPosition(btnX, 6f);
-            row.addActor(buyBtn);
-
-            // "Buy" label
-            BitmapFont btnFont = new BitmapFont();
-            Label.LabelStyle btnStyle = new Label.LabelStyle(btnFont, Color.WHITE);
-            Label btnLabel = new Label("Buy", btnStyle);
-            btnLabel.setPosition(
-                btnX + (BTN_BUY_W / 2f) - (btnLabel.getPrefWidth()  / 2f),
-                6f   + (BTN_BUY_H / 2f) - (btnLabel.getPrefHeight() / 2f)
-            );
-            btnLabel.setTouchable(Touchable.disabled);
-            row.addActor(btnLabel);
-
-            buyBtn.addListener(new ClickListener() {
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    // Re-check affordability at click time, not at popup-build time
-                    if (gameData.currency < upgrade.cost) return;
-                    boolean bought = UpgradeTier.tryPurchase(tree, index, gameData);
-                    if (bought) {
-                        updateFillBar();
-                        updateCurrencyDisplay();
-                        refreshActivePopup();
-                    }
-                }
-            });
-
-        } else {
-            BitmapFont lockFont = new BitmapFont();
-            Label.LabelStyle lockStyle = new Label.LabelStyle(lockFont, Color.DARK_GRAY);
-            Label lockLabel = new Label("Locked", lockStyle);
-            lockLabel.setPosition(
-                rowWidth - lockLabel.getPrefWidth() - 6f,
-                (ROW_HEIGHT / 2f) - (lockLabel.getPrefHeight() / 2f)
-            );
-            row.addActor(lockLabel);
-        }
-
-        content.add(row).width(rowWidth).height(ROW_HEIGHT).padBottom(ROW_PADDING).row();
     }
 
     // Quick helper function for title that displays on upgrade popup windows
