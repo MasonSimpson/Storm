@@ -633,7 +633,7 @@ public class GameScreen implements Screen {
         }
         activePopupType = type;
         stage.addActor(activePopup);
-        if ("rain".equals(type) && tutorial.isActive()) {
+        if ("rain".equals(type) && tutorial != null) {
             tutorial.onRainPopupOpened();
         }
     }
