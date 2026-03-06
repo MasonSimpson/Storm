@@ -16,6 +16,9 @@ public class GameData {
     public float cps = 0f; // Currency generated passively per second (condensation)
     public int maxIdleTime = 1; // How many hours you can be idle and still get progress
 
+    // Tutorial complete boolean
+    public boolean tutorialComplete = false;
+
     // Prestige values
     public int prestigeLevel = 0; // Prestige/cloud level
     public int rainMultiplier = 1; // Multiplies the amount of rain generated from clicking/auto

@@ -62,6 +62,7 @@ public class SaveManager {
         data.prestigeLevel = gameData.prestigeLevel;
         data.rainMultiplier = gameData.rainMultiplier;
         data.maxIdleTime = gameData.maxIdleTime;
+        data.tutorialComplete = gameData.tutorialComplete;
         data.lastClosedTime = System.currentTimeMillis() / 1000L;
 
         // Collect IDs of all purchased upgrades across every tree
@@ -113,6 +114,7 @@ public class SaveManager {
             gameData.currencyGained = data.currencyEarned;
             gameData.prestigeLevel = data.prestigeLevel;
             gameData.rainMultiplier = data.rainMultiplier;
+            gameData.tutorialComplete = data.tutorialComplete;
 
             // Restore purchased upgrade states
             for (Array<UpgradeTier> tree : upgrades.getAllTrees()) {
@@ -186,6 +188,7 @@ public class SaveManager {
         public int prestigeLevel = 0;
         public int rainMultiplier = 1;
         public int maxIdleTime = 1;
+        public boolean tutorialComplete = false; // Tutorial only shows once when game is first ran
         public long lastClosedTime = 0L;
         public Array<String> purchasedUpgrades = new Array<>();
         public Array<String> cooldownIds = new Array<>();

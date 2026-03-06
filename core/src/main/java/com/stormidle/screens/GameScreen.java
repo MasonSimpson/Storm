@@ -59,6 +59,7 @@ public class GameScreen implements Screen {
     private SpriteBatch batch;
     private GameData gameData = new GameData();
     private UpgradeManager upgrades;
+    private TutorialManager tutorial;
 
     // Sprite textures
     private Texture[] cloudTextures;   // cloud_1.png … cloud_6.png
@@ -171,6 +172,10 @@ public class GameScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 if (prestigeInProgress) return;
+
+                // Notify tutorial on first click (step 0 → 1)
+                if (tutorial != null) tutorial.onFirstCloudClick();
+
                 int drops = upgrades.abilities.isHurricaneActive()
                     ? gameData.rainMultiplier * 2
                     : gameData.rainMultiplier;
@@ -279,6 +284,17 @@ public class GameScreen implements Screen {
         overlayPm.fill();
         overlayTexture = new Texture(overlayPm);
         overlayPm.dispose();
+
+        if (!gameData.tutorialComplete) {
+            tutorial = new TutorialManager(
+                stage, stageWidth, stageHeight,
+                () -> {
+                    gameData.tutorialComplete = true;
+                    SaveManager.save(gameData, upgrades);
+                }
+            );
+            tutorial.start();
+        }
     }
 
     // Builds the offline progress popup shown when the player returns after being away
@@ -617,6 +633,9 @@ public class GameScreen implements Screen {
         }
         activePopupType = type;
         stage.addActor(activePopup);
+        if ("rain".equals(type) && tutorial.isActive()) {
+            tutorial.onRainPopupOpened();
+        }
     }
 
     // Builds the popup window for prestige
@@ -804,6 +823,7 @@ public class GameScreen implements Screen {
                     () -> {                          // PurchaseCallback
                         updateFillBar();
                         updateCurrencyDisplay();
+                        if (tutorial != null) tutorial.onUpgradePurchased();
                         refreshActivePopup();
                     }
                 );
@@ -1011,6 +1031,7 @@ public class GameScreen implements Screen {
 
             if (drop.y < 0) {
                 rain.removeIndex(i);
+                if (tutorial != null) tutorial.onFirstDropLanded();
                 collectDrop();
             }
         }
@@ -1026,6 +1047,7 @@ public class GameScreen implements Screen {
             fillBar.setValue(0f);
             gameData.currency += gameData.currencyGained;
             updateCurrencyDisplay();
+            if (tutorial != null) tutorial.onFirstConversion();
             // Refresh popup affordability after earning currency
             if("rain".equals(activePopupType) || "econ".equals(activePopupType) || "prestige".equals(activePopupType)) refreshActivePopup();
         }
@@ -1062,5 +1084,6 @@ public class GameScreen implements Screen {
         // Dispose all cloud textures
         for (Texture t : cloudTextures) t.dispose();
         overlayTexture.dispose();
+        if (tutorial != null) tutorial.dispose();
     }
 }
