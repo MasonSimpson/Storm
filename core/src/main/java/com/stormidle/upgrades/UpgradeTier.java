@@ -9,14 +9,17 @@ package com.stormidle.upgrades;
 import com.stormidle.objects.GameData;
 import com.badlogic.gdx.utils.Array;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class UpgradeTier {
     private final Consumer<GameData> effect;
+    private final Supplier<String> descriptionSupplier;
 
     // Upgrade tree identifiers - can add more in the future
     public static final String TREE_SPEED = "speed";
     public static final String TREE_VALUE = "value";
     public static final String TREE_AUTO = "auto";
+    public static final String TREE_IDLE = "idle";
     public static final String TREE_CONVERSION  = "conversion";
     public static final String TREE_CONDENSATION = "condensation";
 
@@ -28,15 +31,28 @@ public class UpgradeTier {
     public int cost; // How much currency the upgrade costs
     public boolean purchased = false; // Whether the player has bought this tier or not
 
-    // Constructor
-    public UpgradeTier(String tree, int tier, String name, String description, int cost, Consumer<GameData> effect) {
+    // Constructor for static descriptions (all non-auto upgrades)
+    public UpgradeTier(String tree, int tier, String name, String description,
+                       int cost, Consumer<GameData> effect) {
+        this(tree, tier, name, () -> description, cost, effect);
+    }
+
+    // Constructor for dynamic descriptions (auto upgrades, anything affected by rainMultiplier)
+    public UpgradeTier(String tree, int tier, String name, Supplier<String> descriptionSupplier,
+                       int cost, Consumer<GameData> effect) {
         this.tree = tree;
         this.tier = tier;
         this.name = name;
-        this.description = description;
+        this.descriptionSupplier = descriptionSupplier;
         this.cost = cost;
         this.effect = effect;
     }
+
+    // Always call this instead of reading a description field directly
+    public String getDescription() {
+        return descriptionSupplier.get();
+    }
+
 
     // Each upgrade tree subclass has a different use case for applyEffect
     // So leaving this abstract and implementing it in each upgrade tree class

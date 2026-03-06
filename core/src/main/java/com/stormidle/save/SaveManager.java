@@ -28,22 +28,23 @@ public class SaveManager {
         return Gdx.files.local(SAVE_FILE).exists();
     }
 
-    // Max time offline that counts toward progress — hardcoded to 1 hour for now
-    // TODO: Hook into an upgrade that increases this cap
-    private static final long MAX_OFFLINE_SECONDS = 3600L;
-
     // Returned by load() so GameScreen knows whether to show the offline progress popup
     public static class OfflineResult {
         public final boolean hasProgress;
         public final long secondsAway;
         public final int rainfallCurrency;    // Currency earned from auto-rain conversions
         public final int condensationCurrency; // Currency earned from condensation
+        public final boolean exceededCap; // Will be true if player was away for longer than max idle time
+        public final int maxIdleHours; // Warning message in popup
 
-        public OfflineResult(boolean hasProgress, long secondsAway, int rainfallCurrency, int condensationCurrency) {
-            this.hasProgress           = hasProgress;
-            this.secondsAway           = secondsAway;
-            this.rainfallCurrency      = rainfallCurrency;
-            this.condensationCurrency  = condensationCurrency;
+        public OfflineResult(boolean hasProgress, long secondsAway, int rainfallCurrency, int condensationCurrency,
+                             boolean exceededCap, int maxIdleHours) {
+            this.hasProgress = hasProgress;
+            this.secondsAway = secondsAway;
+            this.rainfallCurrency = rainfallCurrency;
+            this.condensationCurrency = condensationCurrency;
+            this.exceededCap = exceededCap;
+            this.maxIdleHours = maxIdleHours;
         }
     }
 
@@ -52,13 +53,16 @@ public class SaveManager {
         SaveData data = new SaveData();
 
         // Copy GameData fields into save container
-        data.currency           = gameData.currency;
-        data.fallSpeed          = gameData.fallSpeed;
-        data.dropsToFill        = gameData.dropsToFill;
-        data.rps                = gameData.rps;
-        data.cps                = gameData.cps;
-        data.currencyEarned     = gameData.currencyGained;
-        data.lastClosedTime     = System.currentTimeMillis() / 1000L;
+        data.currency = gameData.currency;
+        data.fallSpeed = gameData.fallSpeed;
+        data.dropsToFill = gameData.dropsToFill;
+        data.rps = gameData.rps;
+        data.cps = gameData.cps;
+        data.currencyEarned = gameData.currencyGained;
+        data.prestigeLevel = gameData.prestigeLevel;
+        data.rainMultiplier = gameData.rainMultiplier;
+        data.maxIdleTime = gameData.maxIdleTime;
+        data.lastClosedTime = System.currentTimeMillis() / 1000L;
 
         // Collect IDs of all purchased upgrades across every tree
         for (Array<UpgradeTier> tree : upgrades.getAllTrees()) {
@@ -83,7 +87,8 @@ public class SaveManager {
         FileHandle file = Gdx.files.local(SAVE_FILE);
         file.writeString(jsonString, false);
 
-        Gdx.app.log("SaveManager", "Game saved. Purchased upgrades: " + data.purchasedUpgrades.size);
+        Gdx.app.log("SaveManager", "Game saved. Prestige: " + data.prestigeLevel
+            + " | Max idle: " + data.maxIdleTime + "h");
     }
 
     // Reads the save file and restores GameData and upgrade purchased states.
@@ -93,19 +98,21 @@ public class SaveManager {
         FileHandle file = Gdx.files.local(SAVE_FILE);
         if (!file.exists()) {
             Gdx.app.log("SaveManager", "No save file found, starting fresh.");
-            return new OfflineResult(false, 0, 0,0);
+            return new OfflineResult(false, 0, 0, 0, false, gameData.maxIdleTime);
         }
 
         try {
             Json json = new Json();
             SaveData data = json.fromJson(SaveData.class, file.readString());
 
-            gameData.currency           = data.currency;
-            gameData.fallSpeed          = data.fallSpeed;
-            gameData.dropsToFill        = data.dropsToFill;
-            gameData.rps                = data.rps;
-            gameData.cps                = data.cps;
-            gameData.currencyGained     = data.currencyEarned;
+            gameData.currency = data.currency;
+            gameData.fallSpeed = data.fallSpeed;
+            gameData.dropsToFill = data.dropsToFill;
+            gameData.rps = data.rps;
+            gameData.cps = data.cps;
+            gameData.currencyGained = data.currencyEarned;
+            gameData.prestigeLevel = data.prestigeLevel;
+            gameData.rainMultiplier = data.rainMultiplier;
 
             // Restore purchased upgrade states
             for (Array<UpgradeTier> tree : upgrades.getAllTrees()) {
@@ -127,31 +134,34 @@ public class SaveManager {
             upgrades.abilities.setCooldownTimestamps(cooldowns);
 
             // Calculate offline progress
-            OfflineResult result = new OfflineResult(false, 0, 0, 0);
+            OfflineResult result = new OfflineResult(false, 0, 0, 0, false, gameData.maxIdleTime);
             if (data.lastClosedTime > 0) {
                 long now            = System.currentTimeMillis() / 1000L;
                 long rawSecondsAway = now - data.lastClosedTime;
-                long secondsAway    = Math.min(rawSecondsAway, MAX_OFFLINE_SECONDS);
+                long maxSeconds     = gameData.maxIdleTime * 3600L;
+                long cappedSeconds  = Math.min(rawSecondsAway, maxSeconds);
+                boolean exceededCap = rawSecondsAway > maxSeconds;
 
                 int rainfallCurrency     = 0;
                 int condensationCurrency = 0;
 
-                // Rainfall offline earnings — multiplier applied to conversions
+                // Earnings calculated against capped time only
                 if (gameData.rps > 0) {
-                    float totalDrops  = gameData.rps * secondsAway;
-                    int conversions   = (int)(totalDrops / gameData.dropsToFill);
-                    rainfallCurrency  = conversions * gameData.currencyGained;
+                    float totalDrops = gameData.rps * cappedSeconds;
+                    int conversions  = (int)(totalDrops / gameData.dropsToFill);
+                    rainfallCurrency = conversions * gameData.currencyGained;
                 }
 
-                // Condensation offline earnings — no multiplier
                 if (gameData.cps > 0) {
-                    condensationCurrency = (int)(gameData.cps * secondsAway);
+                    condensationCurrency = (int)(gameData.cps * cappedSeconds);
                 }
 
                 int totalEarned = rainfallCurrency + condensationCurrency;
-                if (totalEarned > 0) {
+                // Show popup if there's earnings OR if the cap was exceeded (even if earnings = 0)
+                if (totalEarned > 0 || exceededCap) {
                     gameData.currency += totalEarned;
-                    result = new OfflineResult(true, secondsAway, rainfallCurrency, condensationCurrency);
+                    result = new OfflineResult(true, rawSecondsAway, rainfallCurrency,
+                        condensationCurrency, exceededCap, gameData.maxIdleTime);
                 }
             }
 
@@ -160,31 +170,25 @@ public class SaveManager {
 
         } catch (Exception e) {
             Gdx.app.error("SaveManager", "Failed to load save file: " + e.getMessage());
-            return new OfflineResult(false, 0, 0, 0);
-        }
-    }
-
-    // Deletes the save file. Call this on prestige reset.
-    public static void deleteSave() {
-        FileHandle file = Gdx.files.local(SAVE_FILE);
-        if (file.exists()) {
-            file.delete();
-            Gdx.app.log("SaveManager", "Save file deleted.");
+            return new OfflineResult(false, 0, 0, 0, false, gameData.maxIdleTime);
         }
     }
 
     // Internal POJO used for JSON serialization.
     // libGDX's Json class needs a public no-arg constructor and public fields.
     public static class SaveData {
-        public int currency                    = 0;
-        public float fallSpeed                 = 300f;
-        public int dropsToFill                 = 50;
-        public float rps                       = 0f;
-        public float cps                       = 0f;
-        public int currencyEarned              = 1;
-        public long lastClosedTime             = 0L;
+        public int currency = 0;
+        public float fallSpeed = 300f;
+        public int dropsToFill = 50;
+        public float rps = 0f;
+        public float cps = 0f;
+        public int currencyEarned = 1;
+        public int prestigeLevel = 0;
+        public int rainMultiplier = 1;
+        public int maxIdleTime = 1;
+        public long lastClosedTime = 0L;
         public Array<String> purchasedUpgrades = new Array<>();
-        public Array<String> cooldownIds        = new Array<>();
-        public Array<Long>   cooldownTimestamps = new Array<>();
+        public Array<String> cooldownIds = new Array<>();
+        public Array<Long> cooldownTimestamps = new Array<>();
     }
 }

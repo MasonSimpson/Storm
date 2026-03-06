@@ -112,7 +112,7 @@ public class UpgradeRow extends com.badlogic.gdx.scenes.scene2d.Group implements
         nameLabel.setPosition(6f, ROW_HEIGHT - nameLabel.getPrefHeight() - 4f);
 
         // --- Description ---
-        descLabel.setText(upgrade.description);
+        descLabel.setText(upgrade.getDescription());
         descLabel.setColor(unlocked ? Color.LIGHT_GRAY : Color.DARK_GRAY);
 
         // --- Remove old right-side widgets ---

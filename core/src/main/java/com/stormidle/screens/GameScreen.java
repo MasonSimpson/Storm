@@ -24,10 +24,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.stormidle.objects.Rain;
 import com.stormidle.objects.GameData;
-import com.stormidle.upgrades.AbilityDefinition;
-import com.stormidle.upgrades.AbilityManager;
-import com.stormidle.upgrades.UpgradeTier;
-import com.stormidle.upgrades.UpgradeManager;
+import com.stormidle.upgrades.*;
 import com.stormidle.save.SaveManager;
 
 public class GameScreen implements Screen {
@@ -44,8 +41,8 @@ public class GameScreen implements Screen {
     private static final float BTN_HEIGHT =       200f;
     private static final float BTN_PADDING =      3f;   // Gap between buttons
     private static final float BTN_RIGHT_MARGIN = 20f;   // Gap from right edge of screen
-    private static final float POPUP_WIDTH =      400f;
-    private static final float POPUP_HEIGHT =     600f;
+    public static final float POPUP_WIDTH =      400f;
+    public static final float POPUP_HEIGHT =     600f;
 
     // Upgrade row layout inside upgrade popup
     public static final float ROW_HEIGHT =       80f;
@@ -61,10 +58,12 @@ public class GameScreen implements Screen {
     private Stage stage = new Stage(new ScreenViewport());
     private SpriteBatch batch;
     private GameData gameData = new GameData();
-    private UpgradeManager upgrades = new UpgradeManager();
+    private UpgradeManager upgrades;
 
     // Sprite textures
-    private Texture cloudTexture;
+    private Texture[] cloudTextures;   // cloud_1.png … cloud_6.png
+    private Texture overlayTexture;    // solid black 1x1, used by transition
+    private boolean prestigeInProgress = false;
     private Texture rainTexture;
     private Texture bowlTexture;
     private Texture currencyTexture;
@@ -132,6 +131,18 @@ public class GameScreen implements Screen {
         batch = new SpriteBatch();
         rain = new Array<>();
 
+        // Load the cloud textures into the cloud array before pulling saved game data
+        // Load all cloud textures
+        cloudTextures = new Texture[]{
+            new Texture("cloud_1.png"),
+            new Texture("cloud_2.png"),
+            new Texture("cloud_3.png"),
+            new Texture("cloud_4.png"),
+            new Texture("cloud_5.png"),
+            new Texture("cloud_6.png"),
+        };
+
+        upgrades = new UpgradeManager(gameData);
         SaveManager.OfflineResult offlineResult = SaveManager.load(gameData, upgrades);
 
         // Use a multiplexer so the stage and key listener both receive input
@@ -152,20 +163,21 @@ public class GameScreen implements Screen {
         stageWidth  = stage.getWidth();
         stageHeight = stage.getHeight();
 
-        // Initialize cloud and add to stage
-        cloudTexture = new Texture("cloud_1.png");
-        cloud = new Image(cloudTexture);
+        // Cloud actor — pick texture based on current prestige level
+        cloud = new Image(cloudTextures[gameData.prestigeLevel]);
         cloud.setSize(cloud.getPrefWidth(), cloud.getPrefHeight());
         cloud.setPosition(stageWidth * 0.10f, stageHeight * 0.65f);
         cloud.addListener(new ClickListener() {
-           @Override
-           public void clicked(InputEvent event, float x, float y) {
-               int drops = upgrades.abilities.isHurricaneActive() ? 2 : 1;
-               for (int i = 0; i < drops; i++) {
-                   float xOffset = i * 20f; // second drop spawns 20px to the right
-                   rain.add(new Rain(cloud.getX() + xOffset, cloud.getY(), gameData.fallSpeed));
-               }
-           }
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (prestigeInProgress) return;
+                int drops = upgrades.abilities.isHurricaneActive()
+                    ? gameData.rainMultiplier * 2
+                    : gameData.rainMultiplier;
+                for (int i = 0; i < drops; i++) {
+                    rain.add(new Rain(cloud.getX() + i * 20f, cloud.getY(), gameData.fallSpeed));
+                }
+            }
         });
         stage.addActor(cloud);
 
@@ -260,12 +272,19 @@ public class GameScreen implements Screen {
         if (offlineResult.hasProgress) {
             stage.addActor(buildOfflinePopup(offlineResult));
         }
+
+        // Solid black 1x1 for the transition overlay
+        Pixmap overlayPm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        overlayPm.setColor(0f, 0f, 0f, 1f);
+        overlayPm.fill();
+        overlayTexture = new Texture(overlayPm);
+        overlayPm.dispose();
     }
 
     // Builds the offline progress popup shown when the player returns after being away
     private Group buildOfflinePopup(SaveManager.OfflineResult result) {
         float w = 360f;
-        float h = 260f;
+        float h = result.exceededCap ? 320f : 260f;
         float x = (stageWidth  / 2f) - (w / 2f);
         float y = (stageHeight / 2f) - (h / 2f);
 
@@ -273,7 +292,6 @@ public class GameScreen implements Screen {
         popup.setSize(w, h);
         popup.setPosition(x, y);
 
-        // Background
         Image bg = new Image(makeColorTexture(0.08f, 0.08f, 0.12f, 0.97f));
         bg.setSize(w, h);
         popup.addActor(bg);
@@ -281,38 +299,38 @@ public class GameScreen implements Screen {
         // Title
         BitmapFont titleFont = new BitmapFont();
         titleFont.getData().setScale(1.6f);
-        Label.LabelStyle titleStyle = new Label.LabelStyle(titleFont, Color.WHITE);
-        Label title = new Label("Welcome Back!", titleStyle);
+        Label title = new Label("Welcome Back!", new Label.LabelStyle(titleFont, Color.WHITE));
         title.setPosition((w / 2f) - (title.getPrefWidth() / 2f), h - 45f);
         popup.addActor(title);
 
-        // Format time away into a readable string
-        long seconds = result.secondsAway;
-        String timeAway;
-        if (seconds < 60) {
-            timeAway = seconds + " seconds";
-        } else if (seconds < 3600) {
-            timeAway = (seconds / 60) + " minutes";
-        } else {
-            timeAway = (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
-        }
-
-        BitmapFont bodyFont = new BitmapFont();
-        Label.LabelStyle bodyStyle = new Label.LabelStyle(bodyFont, Color.LIGHT_GRAY);
-        Label timeLabel = new Label("You were away for " + timeAway, bodyStyle);
+        // Full real time away (uncapped)
+        Label timeLabel = new Label("You were away for " + formatTime(result.secondsAway),
+            new Label.LabelStyle(new BitmapFont(), Color.LIGHT_GRAY));
         timeLabel.setPosition((w / 2f) - (timeLabel.getPrefWidth() / 2f), h - 85f);
         popup.addActor(timeLabel);
 
-        // Rainfall and condensation earnings shown separately
+        // Cap exceeded warning
+        if (result.exceededCap) {
+            BitmapFont warnFont = new BitmapFont();
+            Label warnLabel = new Label(
+                "Max idle time: " + result.maxIdleHours + " hour(s).\nUpgrade in Auto Upgrades!",
+                new Label.LabelStyle(warnFont, Color.RED));
+            warnLabel.setPosition((w / 2f) - (warnLabel.getPrefWidth() / 2f), h - 135f);
+            popup.addActor(warnLabel);
+        }
+
+        // Earnings — shift down if warning is shown
         Color earnedColor = new Color(0.9f, 0.85f, 0.3f, 1f);
+        float earningsY   = result.exceededCap ? h - 195f : h - 125f;
 
         if (result.rainfallCurrency > 0) {
             BitmapFont rainFont = new BitmapFont();
             rainFont.getData().setScale(1.1f);
             Label rainLabel = new Label("Rainfall:  +" + result.rainfallCurrency,
                 new Label.LabelStyle(rainFont, earnedColor));
-            rainLabel.setPosition((w / 2f) - (rainLabel.getPrefWidth() / 2f), h - 125f);
+            rainLabel.setPosition((w / 2f) - (rainLabel.getPrefWidth() / 2f), earningsY);
             popup.addActor(rainLabel);
+            earningsY -= 40f;
         }
 
         if (result.condensationCurrency > 0) {
@@ -320,7 +338,7 @@ public class GameScreen implements Screen {
             condFont.getData().setScale(1.1f);
             Label condLabel = new Label("Condensation:  +" + result.condensationCurrency,
                 new Label.LabelStyle(condFont, earnedColor));
-            condLabel.setPosition((w / 2f) - (condLabel.getPrefWidth() / 2f), h - 160f);
+            condLabel.setPosition((w / 2f) - (condLabel.getPrefWidth() / 2f), earningsY);
             popup.addActor(condLabel);
         }
 
@@ -333,8 +351,7 @@ public class GameScreen implements Screen {
         Label dismissLabel = new Label("Collect", new Label.LabelStyle(new BitmapFont(), Color.WHITE));
         dismissLabel.setPosition(
             (w / 2f) - (dismissLabel.getPrefWidth()  / 2f),
-            20f      + (38f / 2f) - (dismissLabel.getPrefHeight() / 2f)
-        );
+            20f      + (38f / 2f) - (dismissLabel.getPrefHeight() / 2f));
         dismissLabel.setTouchable(Touchable.disabled);
         popup.addActor(dismissLabel);
 
@@ -346,6 +363,12 @@ public class GameScreen implements Screen {
         });
 
         return popup;
+    }
+
+    private String formatTime(long seconds) {
+        if (seconds < 60)   return seconds + " seconds";
+        if (seconds < 3600) return (seconds / 60) + " minutes";
+        return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
     }
 
     // Toggles pause menu open or closed
@@ -587,16 +610,90 @@ public class GameScreen implements Screen {
             // If we clicked the same button that was already open, just close it
             if (type.equals(wasOpen)) return;
         }
-
-        activePopup = buildPopup(type);
+        if ("prestige".equals(type)) {
+            activePopup = buildPrestigePopup();
+        } else {
+            activePopup = buildPopup(type);
+        }
         activePopupType = type;
         stage.addActor(activePopup);
+    }
+
+    // Builds the popup window for prestige
+    private Group buildPrestigePopup() {
+        float x = (stageWidth  / 2f) - (POPUP_WIDTH  / 2f);
+        float y = (stageHeight / 2f) - (POPUP_HEIGHT / 2f);
+
+        PrestigePopup popup = new PrestigePopup(
+            gameData,
+            popupBgTexture,
+            buyButtonTexture,
+            buyButtonDisabledTexture,
+            new PrestigePopup.PrestigeCallback() {
+                @Override public void onPrestige() { triggerPrestige(); }
+                @Override public void onClose() {
+                    if (activePopup != null) activePopup.remove();
+                    stage.setScrollFocus(null);
+                    activePopup     = null;
+                    activePopupType = null;
+                }
+            }
+        );
+        popup.setPosition(x, y);
+        return popup;
+    }
+
+    private void triggerPrestige() {
+        if (prestigeInProgress) return;
+        prestigeInProgress = true;
+
+        // Close popup before transition starts
+        if (activePopup != null) {
+            activePopup.remove();
+            activePopup     = null;
+            activePopupType = null;
+        }
+
+        int newLevel = gameData.prestigeLevel + 1; // what it will be after reset
+
+        PrestigeTransition.play(
+            stage,
+            newLevel,
+            overlayTexture,
+            // Midpoint: runs while screen is black — safe to reset everything
+            () -> {
+                PrestigeManager.doPrestige(gameData, upgrades);
+                rain.clear();
+                autoRainAccumulator    = 0f;
+                condensationAccumulator = 0f;
+                dropsCollected         = 0;
+                fillBar.setRange(0f, gameData.dropsToFill);
+                fillBar.setValue(0f);
+
+                // Swap cloud texture
+                cloud.setDrawable(new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(
+                    new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                        cloudTextures[gameData.prestigeLevel])));
+
+                updateCurrencyDisplay();
+                SaveManager.save(gameData, upgrades);
+            },
+            // Complete: re-enable input
+            () -> prestigeInProgress = false
+        );
     }
 
     // Rebuilds and re-opens the current popup in place. Call this after any upgrade is purchased
     // so button states can refresh
     private void refreshActivePopup() {
         if (activePopup == null) return;
+
+        // PrestigePopup is itself Refreshable — no ScrollPane to walk
+        if (activePopup instanceof Refreshable) {
+            ((Refreshable) activePopup).refresh();
+            return;
+        }
+
         for (com.badlogic.gdx.scenes.scene2d.Actor a : activePopup.getChildren()) {
             if (!(a instanceof ScrollPane)) continue;
             Table content = (Table) ((ScrollPane) a).getWidget();
@@ -641,8 +738,8 @@ public class GameScreen implements Screen {
             );
         } else if ("auto".equals(type)) {
             buildPopupContent(popup,
-                new String[][]{{"Rain Generation"}},
-                new Array[]{upgrades.auto.autoTree}
+                new String[][]{{"Rain Generation"}, {"Idle Time"}},
+                new Array[]{upgrades.auto.autoTree, upgrades.auto.idleTimeTree}
             );
         } else if ("econ".equals(type)) {
             buildPopupContent(popup,
@@ -870,7 +967,9 @@ public class GameScreen implements Screen {
             autoRainAccumulator += gameData.rps * delta;
             while (autoRainAccumulator >= 1f) {
                 autoRainAccumulator -= 1f;
-                int drops = upgrades.abilities.isHurricaneActive() ? 2 : 1;
+                int drops = upgrades.abilities.isHurricaneActive()
+                    ? gameData.rainMultiplier * 2
+                    : gameData.rainMultiplier;
                 for (int i = 0; i < drops; i++) {
                     float xOffset = i * 20f; // second drop spawns 20px to the right
                     rain.add(new Rain(cloud.getX() + xOffset, cloud.getY(), gameData.fallSpeed));
@@ -885,7 +984,7 @@ public class GameScreen implements Screen {
                 condensationAccumulator -= 1f;
                 gameData.currency++;
                 updateCurrencyDisplay();
-                if ("econ".equals(activePopupType)) refreshActivePopup();
+                if ("econ".equals(activePopupType) || "prestige".equals(activePopupType)) refreshActivePopup();
             }
         }
 
@@ -928,7 +1027,7 @@ public class GameScreen implements Screen {
             gameData.currency += gameData.currencyGained;
             updateCurrencyDisplay();
             // Refresh popup affordability after earning currency
-            if("rain".equals(activePopupType) || "econ".equals(activePopupType)) refreshActivePopup();
+            if("rain".equals(activePopupType) || "econ".equals(activePopupType) || "prestige".equals(activePopupType)) refreshActivePopup();
         }
     }
 
@@ -945,7 +1044,6 @@ public class GameScreen implements Screen {
         SaveManager.save(gameData, upgrades);
         batch.dispose();
         stage.dispose();
-        cloudTexture.dispose();
         rainTexture.dispose();
         bowlTexture.dispose();
         currencyTexture.dispose();
@@ -961,5 +1059,8 @@ public class GameScreen implements Screen {
         rowPurchasedTexture.dispose();
         buyButtonTexture.dispose();
         buyButtonDisabledTexture.dispose();
+        // Dispose all cloud textures
+        for (Texture t : cloudTextures) t.dispose();
+        overlayTexture.dispose();
     }
 }
