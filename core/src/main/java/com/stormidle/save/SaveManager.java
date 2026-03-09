@@ -115,6 +115,7 @@ public class SaveManager {
             gameData.prestigeLevel = data.prestigeLevel;
             gameData.rainMultiplier = data.rainMultiplier;
             gameData.tutorialComplete = data.tutorialComplete;
+            gameData.maxIdleTime = data.maxIdleTime;
 
             // Restore purchased upgrade states
             for (Array<UpgradeTier> tree : upgrades.getAllTrees()) {
